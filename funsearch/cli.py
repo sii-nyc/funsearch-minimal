@@ -16,11 +16,18 @@ import os
 from funsearch.capset import DEFAULT_INPUTS, build_capset_specification
 from funsearch.core import FunSearchRunner, SearchConfig
 from funsearch.llm import MockLLM, OpenAICompatibleLLM
+from funsearch.string_hash import build_string_hash_specification
 from funsearch.tracing import TraceWriter
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Minimal FunSearch reproduction for the cap set problem.")
+    parser = argparse.ArgumentParser(description="Minimal FunSearch reproduction with small built-in search problems.")
+    parser.add_argument(
+        "--problem",
+        choices=("capset", "string-hash"),
+        default="capset",
+        help="Which built-in problem to run.",
+    )
     parser.add_argument(
         "--llm",
         choices=("openai-compatible", "mock"),
@@ -36,7 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--inputs",
         default=",".join(str(value) for value in DEFAULT_INPUTS),
-        help="Comma-separated cap set dimensions to evaluate, for example 1,2,3,4.",
+        help="Comma-separated cap set dimensions to evaluate when --problem=capset.",
     )
     parser.add_argument("--temperature", type=float, default=0.8)
     parser.add_argument("--seed", type=int, default=0)
@@ -49,8 +56,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
-    inputs = tuple(int(part.strip()) for part in args.inputs.split(",") if part.strip())
-    specification = build_capset_specification(inputs)
+    if args.problem == "capset":
+        inputs = tuple(int(part.strip()) for part in args.inputs.split(",") if part.strip())
+        specification = build_capset_specification(inputs)
+    else:
+        specification = build_string_hash_specification()
     config = SearchConfig(
         iterations=args.iterations,
         islands=args.islands,

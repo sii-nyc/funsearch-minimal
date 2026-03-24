@@ -43,7 +43,7 @@ class MockLLM(LLMClient):
 
     def __init__(self) -> None:
         self._index = 0
-        self._responses = [
+        self._priority_responses = [
             """def priority_v2(element, n):
     \"\"\"Returns the priority with which we want to add `element` to the cap set.\"\"\"
     return sum(element)
@@ -67,9 +67,35 @@ def priority_v2(element, n):
     return float(balance)
 """,
         ]
+        self._mix_char_responses = [
+            """def mix_char_v2(h, i, c):
+    \"\"\"Mixes one character into the running hash state.\"\"\"
+    return ((h << 5) - h + c + i) & 0xFFFFFFFF
+""",
+            """def mix_char_v2(h, i, c):
+    \"\"\"Mixes one character into the running hash state.\"\"\"
+    h ^= c + i * 17
+    return (h * 131) & 0xFFFFFFFF
+""",
+            """```python
+def mix_char_v2(h, i, c):
+    \"\"\"Mixes one character into the running hash state.\"\"\"
+    h += c ^ (i * 29)
+    h ^= h >> 13
+    return (h * 257) & 0xFFFFFFFF
+```
+""",
+            """def mix_char_v2(h, i, c):
+    \"\"\"Mixes one character into the running hash state.\"\"\"
+    return (h * 65599 + (c ^ i)) & 0xFFFFFFFF
+""",
+        ]
 
     def generate(self, prompt: str) -> str:
-        del prompt
-        response = self._responses[self._index % len(self._responses)]
+        if "def mix_char_v" in prompt:
+            responses = self._mix_char_responses
+        else:
+            responses = self._priority_responses
+        response = responses[self._index % len(responses)]
         self._index += 1
         return response

@@ -1,16 +1,27 @@
 from __future__ import annotations
 
 import json
+import math
 import random
 import tempfile
 import unittest
+from textwrap import dedent
 
 from funsearch.capset import build_capset_specification, can_add_to_cap_set, is_cap_set
+from funsearch.cli import build_parser
 from funsearch.core import FunSearchRunner, SearchConfig, evaluate_program
 from funsearch.database import Island, ProgramDatabase, ProgramRecord
 from funsearch.llm import MockLLM
 from funsearch.tracing import TraceWriter
 from funsearch.prompting import build_prompt, extract_function_source, extract_generated_function, replace_function
+from funsearch.string_hash import (
+    build_string_hash_inputs,
+    build_string_hash_specification,
+    make_identifier_strings,
+    make_prefixed_strings,
+    make_random_strings,
+    make_suffixed_strings,
+)
 
 
 class CapSetTests(unittest.TestCase):
@@ -25,6 +36,51 @@ class CapSetTests(unittest.TestCase):
         result = evaluate_program(specification.seed_program, specification)
         self.assertIsNotNone(result)
         self.assertEqual(result.signature, (2.0, 4.0))
+
+
+class StringHashTests(unittest.TestCase):
+    def test_dataset_builders_are_deterministic_and_representative(self) -> None:
+        first = build_string_hash_inputs(random_seed=7)
+        second = build_string_hash_inputs(random_seed=7)
+
+        self.assertEqual(first, second)
+        self.assertEqual([case["label"] for case in first], ["random_lowercase", "shared_prefix", "shared_suffix", "identifiers"])
+        self.assertEqual(make_prefixed_strings()[:2], ["user_0001", "user_0002"])
+        self.assertEqual(make_suffixed_strings()[:2], ["file_001.txt", "file_002.txt"])
+        self.assertIn("get_user_by_id", make_identifier_strings())
+        self.assertEqual(len(make_random_strings(random.Random(3))), 24)
+
+    def test_seed_program_is_valid(self) -> None:
+        specification = build_string_hash_specification()
+        result = evaluate_program(specification.seed_program, specification)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(len(result.signature), 4)
+        self.assertTrue(all(math.isfinite(score) for score in result.signature))
+        self.assertTrue(math.isfinite(result.aggregate_score))
+
+    def test_better_mixer_beats_a_weak_one(self) -> None:
+        specification = build_string_hash_specification()
+        weak_function = "def mix_char(h, i, c):\n    return h\n"
+        strong_function = dedent(
+            """\
+            def mix_char(h, i, c):
+                h ^= c + i * 17
+                h = (h * 131) & 0xFFFFFFFF
+                return h
+            """
+        )
+
+        weak_program = replace_function(specification.seed_program, specification.target_function, weak_function)
+        strong_program = replace_function(specification.seed_program, specification.target_function, strong_function)
+        weak_result = evaluate_program(weak_program, specification)
+        strong_result = evaluate_program(strong_program, specification)
+
+        self.assertIsNotNone(weak_result)
+        self.assertIsNotNone(strong_result)
+        assert weak_result is not None
+        assert strong_result is not None
+        self.assertGreater(strong_result.aggregate_score, weak_result.aggregate_score)
 
 
 class PromptingTests(unittest.TestCase):
@@ -128,6 +184,24 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(result.best_signature, rerun_result.signature)
         self.assertEqual(result.best_score, rerun_result.aggregate_score)
 
+    def test_mock_search_runs_on_string_hash_problem(self) -> None:
+        specification = build_string_hash_specification()
+        seed_result = evaluate_program(specification.seed_program, specification)
+        self.assertIsNotNone(seed_result)
+
+        runner = FunSearchRunner(
+            specification=specification,
+            llm=MockLLM(),
+            config=SearchConfig(iterations=4, islands=2, reset_interval=2, random_seed=0),
+        )
+        result = runner.run()
+        rerun_result = evaluate_program(result.best_program, specification)
+
+        self.assertIsNotNone(rerun_result)
+        self.assertEqual(len(result.best_signature), 4)
+        self.assertEqual(result.best_signature, rerun_result.signature)
+        self.assertEqual(result.best_score, rerun_result.aggregate_score)
+
     def test_trace_writer_persists_events_and_snapshots(self) -> None:
         specification = build_capset_specification((1, 2))
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -158,6 +232,16 @@ class IntegrationTests(unittest.TestCase):
                 final_snapshot = json.load(handle)
             self.assertIn("islands", final_snapshot)
             self.assertTrue(final_snapshot["islands"])
+
+
+class CliTests(unittest.TestCase):
+    def test_problem_flag_defaults_to_capset(self) -> None:
+        args = build_parser().parse_args(["--llm", "mock"])
+        self.assertEqual(args.problem, "capset")
+
+    def test_problem_flag_accepts_string_hash(self) -> None:
+        args = build_parser().parse_args(["--problem", "string-hash", "--llm", "mock"])
+        self.assertEqual(args.problem, "string-hash")
 
 
 if __name__ == "__main__":

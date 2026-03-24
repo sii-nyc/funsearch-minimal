@@ -21,11 +21,13 @@ Compared with the paper, this version is intentionally small:
 - island resets happen every fixed number of evaluated candidates
 - fixed-temperature sampling for clusters and programs
 - OpenAI-compatible API calls use the official OpenAI Python SDK
+- two small built-in example problems: cap set and string hashing
 
 ## Layout
 
 - `main.py`: CLI entrypoint
 - `funsearch/capset.py`: cap set utilities and the paper-style problem specification
+- `funsearch/string_hash.py`: a tiny string-hash demo that evolves `mix_char(h, i, c)`
 - `funsearch/core.py`: specification, evaluator, and search loop
 - `funsearch/database.py`: islands, clustering, and resets
 - `funsearch/prompting.py`: best-shot prompt building and AST-based candidate extraction
@@ -37,6 +39,12 @@ Mock LLM, fully offline:
 
 ```bash
 uv run python main.py --llm mock --iterations 8 --islands 4 --reset-interval 4 --inputs 1,2,3,4
+```
+
+Mock LLM on the string-hash demo:
+
+```bash
+uv run python main.py --problem string-hash --llm mock --iterations 8 --islands 4 --reset-interval 4
 ```
 
 OpenAI-compatible API:
@@ -59,6 +67,8 @@ The CLI prints:
 - per-input score signature
 - optional trace directory
 - the full best program currently stored in the database
+
+The string-hash problem is meant as a compact teaching example: `hash_string(s)` stays fixed, FunSearch only mutates `mix_char(h, i, c)`, and the evaluator scores how well the resulting hash spreads several small string families across buckets.
 
 ## Saving The Evolution Process
 
