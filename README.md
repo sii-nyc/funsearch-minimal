@@ -20,7 +20,7 @@ Compared with the paper, this version is intentionally small:
 - no sandboxing, timeout, or resource isolation
 - island resets happen every fixed number of evaluated candidates
 - fixed-temperature sampling for clusters and programs
-- OpenAI-compatible API calls use only the Python standard library
+- OpenAI-compatible API calls use the official OpenAI Python SDK
 
 ## Layout
 
@@ -29,7 +29,7 @@ Compared with the paper, this version is intentionally small:
 - `funsearch/core.py`: specification, evaluator, and search loop
 - `funsearch/database.py`: islands, clustering, and resets
 - `funsearch/prompting.py`: best-shot prompt building and AST-based candidate extraction
-- `funsearch/llm.py`: OpenAI-compatible client plus offline `MockLLM`
+- `funsearch/llm.py`: OpenAI-compatible client via the OpenAI SDK plus offline `MockLLM`
 
 ## Run
 

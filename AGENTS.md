@@ -22,7 +22,7 @@ The goal is to make the core algorithm easy to inspect and modify, not to build 
   - plugin systems or large abstractions
   - extra example problems unless explicitly requested
 - Prefer the Python standard library where practical.
-- Do not add the `openai` SDK or other client libraries without explicit approval. The current OpenAI-compatible client intentionally uses standard-library HTTP only.
+- The repository now uses the official `openai` Python SDK for API calls. Keep `base_url`, `api_key`, and `model` configurable, and do not swap in another client library without explicit approval.
 
 ## Current Architecture
 

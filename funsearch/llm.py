@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import json
 from abc import ABC, abstractmethod
-from urllib import request
+
+from openai import OpenAI
 
 
 class LLMClient(ABC):
@@ -16,31 +16,26 @@ class LLMClient(ABC):
 
 
 class OpenAICompatibleLLM(LLMClient):
-    """Calls a chat-completions endpoint that follows the OpenAI wire format."""
+    """Calls a chat-completions endpoint through the official OpenAI Python SDK."""
 
     def __init__(self, base_url: str, api_key: str, model: str, temperature: float = 0.8) -> None:
-        self.base_url = base_url.rstrip("/")
-        self.api_key = api_key
         self.model = model
         self.temperature = temperature
+        self.client = OpenAI(
+            api_key=api_key,
+            base_url=base_url.rstrip("/"),
+        )
 
     def generate(self, prompt: str) -> str:
-        payload = json.dumps(
-            {
-                "model": self.model,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": self.temperature,
-            }
-        ).encode("utf-8")
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-
-        endpoint = f"{self.base_url}/chat/completions"
-        http_request = request.Request(endpoint, data=payload, headers=headers, method="POST")
-        with request.urlopen(http_request) as response:
-            data = json.loads(response.read().decode("utf-8"))
-        return data["choices"][0]["message"]["content"]
+        completion = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=self.temperature,
+        )
+        content = completion.choices[0].message.content
+        if content is None:
+            raise ValueError("OpenAI SDK returned an empty completion.")
+        return content
 
 
 class MockLLM(LLMClient):

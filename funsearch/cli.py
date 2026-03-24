@@ -5,7 +5,7 @@ Simplifications relative to the paper:
 - No sandboxing, timeouts, or distributed workers.
 - Island resets happen every fixed number of evaluated candidates.
 - Fixed softmax temperatures for cluster and program sampling.
-- OpenAI-compatible API access uses the Python standard library only.
+- OpenAI-compatible API access uses the official OpenAI Python SDK.
 """
 
 from __future__ import annotations
