@@ -28,6 +28,8 @@
 - [funsearch/string_hash.py](/Users/hariseldon/Desktop/codes/funsearch/funsearch/string_hash.py)：字符串哈希示例问题。
 - [tests/test_funsearch.py](/Users/hariseldon/Desktop/codes/funsearch/tests/test_funsearch.py)：单元测试和集成测试。
 
+prompt 构造仍然把 skeleton 视为只读，但现在会把 seed program 里除目标函数外的固定源码一并放进上下文，让模型能看到目标函数在 `main` 和辅助函数里是怎么被调用的。
+
 ## 项目里有哪些问题
 
 目前内置了两个 problem。

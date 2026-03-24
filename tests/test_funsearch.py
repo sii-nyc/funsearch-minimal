@@ -115,13 +115,35 @@ class PromptingTests(unittest.TestCase):
         self.assertIn("def priority_v0(", prompt)
         self.assertIn("def priority_v1(", prompt)
         self.assertIn("def priority_v2(", prompt)
-        self.assertNotIn("def solve(", prompt)
+        self.assertIn("def solve(", prompt)
+        self.assertNotIn("def priority(element, n):", prompt)
         self.assertIn("Return Python code only.", prompt)
         self.assertIn("Output exactly one function definition", prompt)
         self.assertIn("aggregate_score=3.5", prompt)
         self.assertIn("Goal: maximize the aggregate score", prompt)
         self.assertIn("Best aggregate_score among the shown versions: 3.5", prompt)
         self.assertIn("`main`:", prompt)
+
+    def test_string_hash_prompt_includes_fixed_helper_source(self) -> None:
+        specification = build_string_hash_specification()
+        seed_function = extract_function_source(specification.seed_program, specification.target_function)
+        records = [
+            ProgramRecord(
+                source=specification.seed_program,
+                function_source=seed_function,
+                signature=(-1.0, -2.0, -3.0, -4.0),
+                aggregate_score=-2.5,
+                source_length=len(specification.seed_program),
+                created_at=0,
+            )
+        ]
+
+        prompt = build_prompt(specification.seed_program, specification.target_function, records)
+
+        self.assertIn("def main(problem):", prompt)
+        self.assertIn("def hash_string(s):", prompt)
+        self.assertNotIn("def mix_char(h, i, c):", prompt)
+        self.assertIn("def mix_char_v1(h, i, c):", prompt)
 
     def test_extract_generated_function_from_fenced_code(self) -> None:
         completion = """Here is a candidate.

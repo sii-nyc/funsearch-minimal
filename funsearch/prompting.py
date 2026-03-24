@@ -17,7 +17,7 @@ def build_prompt(seed_program: str, target_function: str, sampled_programs: Iter
     """根据 seed program 和历史程序构造 best-shot prompt。
 
     prompt 的结构是：
-    - 模块前导部分（docstring / import）
+    - 固定程序骨架（除目标函数外）
     - 若干历史版本：`target_v0`, `target_v1`, ...
     - 一个空白的新版本：`target_vN`
 
@@ -53,7 +53,8 @@ def build_prompt(seed_program: str, target_function: str, sampled_programs: Iter
         f"# Best aggregate_score among the shown versions: {best_program.aggregate_score}",
         f"# Best signature among the shown versions: {best_program.signature}",
         "",
-        _extract_module_prelude(seed_program).rstrip(),
+        "# Fixed program skeleton (read-only, shown for context):",
+        _extract_fixed_skeleton(seed_program, target_function).rstrip(),
         "",
         *[block.rstrip() + "\n" for block in versioned_blocks],
         _build_empty_target(seed_program, target_function, f"{target_function}_v{next_index}"),
@@ -139,20 +140,19 @@ def replace_function(program_source: str, function_name: str, new_function_sourc
     return ast.unparse(updated_module) + "\n"
 
 
-def _extract_module_prelude(program_source: str) -> str:
-    """提取模块开头的说明和 import，作为 prompt 前导。"""
+def _extract_fixed_skeleton(program_source: str, target_function: str) -> str:
+    """提取固定骨架源码，但排除会被进化的目标函数。"""
 
     module = ast.parse(program_source)
-    prelude = []
+    fixed_body = []
     for node in module.body:
-        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-            prelude.append(ast.unparse(node))
+        if isinstance(node, ast.FunctionDef) and node.name == target_function:
             continue
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            prelude.append(ast.unparse(node))
-            continue
-        break
-    return "\n\n".join(prelude)
+        fixed_body.append(node)
+
+    fixed_module = ast.Module(body=fixed_body, type_ignores=[])
+    ast.fix_missing_locations(fixed_module)
+    return ast.unparse(fixed_module)
 
 
 def _summarize_program_for_prompt(program_source: str, target_function: str) -> list[str]:

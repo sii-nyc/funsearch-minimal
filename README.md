@@ -36,6 +36,8 @@ Compared with the paper, this version is intentionally small:
 - `funsearch/prompting.py`: best-shot prompt building and AST-based candidate extraction
 - `funsearch/llm.py`: OpenAI-compatible client via the OpenAI SDK plus offline `MockLLM`
 
+Prompt construction keeps the skeleton read-only, but it now includes the fixed helper/source context from the seed program so the model can see how the evolved function is actually used.
+
 ## Run
 
 Mock LLM, fully offline:
