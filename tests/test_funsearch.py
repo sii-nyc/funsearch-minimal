@@ -5,6 +5,7 @@ import math
 import random
 import tempfile
 import unittest
+from pathlib import Path
 from textwrap import dedent
 
 from funsearch.capset import build_capset_specification, can_add_to_cap_set, is_cap_set
@@ -22,6 +23,7 @@ from funsearch.string_hash import (
     make_random_strings,
     make_suffixed_strings,
 )
+from funsearch.trace_viewer import load_trace_state
 
 
 class CapSetTests(unittest.TestCase):
@@ -114,6 +116,12 @@ class PromptingTests(unittest.TestCase):
         self.assertIn("def priority_v1(", prompt)
         self.assertIn("def priority_v2(", prompt)
         self.assertNotIn("def solve(", prompt)
+        self.assertIn("Return Python code only.", prompt)
+        self.assertIn("Output exactly one function definition", prompt)
+        self.assertIn("aggregate_score=3.5", prompt)
+        self.assertIn("Goal: maximize the aggregate score", prompt)
+        self.assertIn("Best aggregate_score among the shown versions: 3.5", prompt)
+        self.assertIn("`main`:", prompt)
 
     def test_extract_generated_function_from_fenced_code(self) -> None:
         completion = """Here is a candidate.
@@ -136,6 +144,12 @@ class EvaluatorAndDatabaseTests(unittest.TestCase):
         invalid_function = "def priority(element, n):\n    return complex(1, 1)\n"
         invalid_program = replace_function(specification.seed_program, specification.target_function, invalid_function)
         self.assertIsNone(evaluate_program(invalid_program, specification))
+
+    def test_dead_loop_program_times_out(self) -> None:
+        specification = build_capset_specification((1,))
+        hanging_function = "def priority(element, n):\n    while True:\n        pass\n"
+        hanging_program = replace_function(specification.seed_program, specification.target_function, hanging_function)
+        self.assertIsNone(evaluate_program(hanging_program, specification))
 
     def test_clusters_preserve_same_signature_together(self) -> None:
         island = Island()
@@ -232,6 +246,30 @@ class IntegrationTests(unittest.TestCase):
                 final_snapshot = json.load(handle)
             self.assertIn("islands", final_snapshot)
             self.assertTrue(final_snapshot["islands"])
+
+    def test_trace_viewer_loads_iteration_timeline(self) -> None:
+        specification = build_string_hash_specification()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            trace_dir = f"{temp_dir}/trace"
+            FunSearchRunner(
+                specification=specification,
+                llm=MockLLM(),
+                config=SearchConfig(iterations=2, islands=2, reset_interval=2, random_seed=0),
+                trace_writer=TraceWriter(trace_dir),
+            ).run()
+
+            state = load_trace_state(trace_dir)
+
+            self.assertEqual(Path(state["trace_dir"]), Path(trace_dir).resolve())
+            self.assertEqual(state["completed_iterations"], 2)
+            self.assertEqual(len(state["iterations"]), 2)
+            self.assertEqual(state["run_metadata"]["specification"]["target_function"], "mix_char")
+            first_iteration = state["iterations"][0]
+            self.assertEqual(first_iteration["iteration"], 0)
+            self.assertIsNotNone(first_iteration["selected_island"])
+            self.assertTrue(first_iteration["prompt_text"])
+            self.assertTrue(first_iteration["completion_text"])
+            self.assertIn(first_iteration["status"], {"accepted", "rejected"})
 
 
 class CliTests(unittest.TestCase):

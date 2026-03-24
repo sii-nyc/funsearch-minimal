@@ -1,4 +1,10 @@
-"""Cap set utilities and the paper-style FunSearch specification."""
+"""cap set 问题的辅助函数和问题定义。
+
+这是仓库最接近论文原始问题的示例：
+- 固定 `solve(n)` 框架
+- 只进化 `priority(element, n)`
+- evaluator 检查输出是不是合法 cap set，并返回其大小
+"""
 
 from __future__ import annotations
 
@@ -51,24 +57,25 @@ CAP_SET_SEED_PROGRAM = dedent(
 
 
 def all_vectors(n: int) -> list[Element]:
-    """Returns all vectors in Z_3^n."""
+    """返回 Z_3^n 中的所有向量。"""
 
     return [tuple(vector) for vector in product(range(3), repeat=n)]
 
 
 def third_on_line(left: Element, right: Element) -> Element:
-    """Returns the unique third point completing a line through left and right."""
+    """给定两个点，返回与它们共线的第三个点。"""
 
     return tuple((-x - y) % 3 for x, y in zip(left, right))
 
 
 def can_add_to_cap_set(element: Element, candidate_set: Iterable[Element]) -> bool:
-    """Checks whether adding element would preserve the cap set property."""
+    """判断把 `element` 加进去后，是否仍然保持 cap set 性质。"""
 
     existing = list(candidate_set)
     if element in existing:
         return False
 
+    # 如果 `element` 与已有某个点形成的第三点也已经在集合里，就会产生一条线。
     existing_set = set(existing)
     for other in existing:
         if third_on_line(element, other) in existing_set:
@@ -77,7 +84,7 @@ def can_add_to_cap_set(element: Element, candidate_set: Iterable[Element]) -> bo
 
 
 def is_cap_set(candidate_set: Iterable[Element], n: int) -> bool:
-    """Returns True iff candidate_set contains no line in Z_3^n."""
+    """当且仅当集合中不存在三点共线时返回 True。"""
 
     elements = [tuple(element) for element in candidate_set]
     if any(len(element) != n for element in elements):
@@ -94,7 +101,7 @@ def is_cap_set(candidate_set: Iterable[Element], n: int) -> bool:
 
 
 def build_capset_specification(inputs: Iterable[int] = DEFAULT_INPUTS) -> ProblemSpecification:
-    """Builds the minimal FunSearch specification for direct cap set construction."""
+    """构造 cap set 问题的 `ProblemSpecification`。"""
 
     normalized_inputs = tuple(int(value) for value in inputs)
     return ProblemSpecification(

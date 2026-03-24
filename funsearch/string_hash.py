@@ -1,4 +1,13 @@
-"""String-hash demo problem for the minimal FunSearch reproduction."""
+"""字符串哈希 demo 问题。
+
+这个例子比 cap set 更小、更直观：
+- 固定 `hash_string(s)` 主流程
+- 只进化 `mix_char(h, i, c)`
+- evaluator 看字符串映射到桶后是否足够均匀
+
+它的教学重点是：让读者清楚看到“只搜索一个很小的函数”也能形成完整的
+FunSearch 闭环。
+"""
 
 from __future__ import annotations
 
@@ -53,7 +62,7 @@ def make_random_strings(
     min_length: int = 4,
     max_length: int = 10,
 ) -> list[str]:
-    """Builds lowercase strings with varied lengths."""
+    """生成随机小写字符串。"""
 
     alphabet = string.ascii_lowercase
     strings_out = []
@@ -64,19 +73,19 @@ def make_random_strings(
 
 
 def make_prefixed_strings(count: int = DEFAULT_STRINGS_PER_CASE) -> list[str]:
-    """Builds strings that differ mostly near the end."""
+    """生成共享前缀的字符串，测试后缀差异是否能被哈希识别。"""
 
     return [f"user_{index:04d}" for index in range(1, count + 1)]
 
 
 def make_suffixed_strings(count: int = DEFAULT_STRINGS_PER_CASE) -> list[str]:
-    """Builds strings that share the same suffix."""
+    """生成共享后缀的字符串，测试前缀差异是否能被哈希识别。"""
 
     return [f"file_{index:03d}.txt" for index in range(1, count + 1)]
 
 
 def make_identifier_strings() -> list[str]:
-    """Builds short identifier-like names with overlapping fragments."""
+    """生成一批相互相似的标识符风格字符串。"""
 
     return [
         "get_user",
@@ -111,7 +120,13 @@ def build_string_hash_inputs(
     random_seed: int = DEFAULT_RANDOM_SEED,
     num_buckets: int = DEFAULT_BUCKETS,
 ) -> tuple[dict[str, object], ...]:
-    """Builds a small deterministic dataset with several string families."""
+    """构造一个小而固定的测试集。
+
+    这里每个输入项都是一个小字典，里面放：
+    - `strings`：这组待哈希的字符串
+    - `num_buckets`：桶数量
+    - `label`：给人看的标签，方便理解这组数据在测什么
+    """
 
     rng = random.Random(random_seed)
     return (
@@ -141,8 +156,9 @@ def build_string_hash_inputs(
 def build_string_hash_specification(
     inputs: Iterable[dict[str, object]] | None = None,
 ) -> ProblemSpecification:
-    """Builds a tiny FunSearch problem around a fixed string hash skeleton."""
+    """构造字符串哈希问题的 `ProblemSpecification`。"""
 
+    # 同一次运行里，这些输入会被所有候选程序共享，用作固定评测集。
     normalized_inputs = tuple(inputs) if inputs is not None else build_string_hash_inputs()
     return ProblemSpecification(
         seed_program=STRING_HASH_SEED_PROGRAM,

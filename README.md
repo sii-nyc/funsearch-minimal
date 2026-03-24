@@ -1,5 +1,7 @@
 # Minimal FunSearch Reproduction
 
+Chinese documentation: [README.zh-CN.md](/Users/hariseldon/Desktop/codes/funsearch/README.zh-CN.md)
+
 This repository contains a minimal, readability-first Python reproduction of the core FunSearch loop from the paper _Mathematical discoveries from program search with large language models_.
 
 It intentionally keeps only the central ideas:
@@ -17,7 +19,8 @@ Compared with the paper, this version is intentionally small:
 
 - single-process and synchronous
 - no distributed sampler/evaluator/database workers
-- no sandboxing, timeout, or resource isolation
+- no sandboxing or resource isolation
+- a small fixed execution timeout rejects candidates that hang
 - island resets happen every fixed number of evaluated candidates
 - fixed-temperature sampling for clusters and programs
 - OpenAI-compatible API calls use the official OpenAI Python SDK

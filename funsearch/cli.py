@@ -1,11 +1,11 @@
-"""Command-line interface for the minimal FunSearch reproduction.
+"""命令行入口。
 
-Simplifications relative to the paper:
-- Single-process, synchronous search.
-- No sandboxing, timeouts, or distributed workers.
-- Island resets happen every fixed number of evaluated candidates.
-- Fixed softmax temperatures for cluster and program sampling.
-- OpenAI-compatible API access uses the official OpenAI Python SDK.
+相对论文版，这里刻意保留的是最小可运行骨架：
+- 单进程、同步执行
+- 没有沙箱和分布式 worker
+- 岛屿重置按“评估次数”触发，而不是按墙钟时间
+- cluster / program 采样温度写死在配置里
+- OpenAI 兼容接口通过官方 Python SDK 调用
 """
 
 from __future__ import annotations
@@ -21,6 +21,11 @@ from funsearch.tracing import TraceWriter
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """定义 CLI 参数。
+
+    这个项目不做复杂命令层设计，所有可调项都直接平铺成参数。
+    """
+
     parser = argparse.ArgumentParser(description="Minimal FunSearch reproduction with small built-in search problems.")
     parser.add_argument(
         "--problem",
@@ -55,11 +60,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    """解析参数、构建问题、选择 LLM，然后运行搜索。"""
+
     args = build_parser().parse_args()
     if args.problem == "capset":
+        # cap set 问题的输入是一组维度，例如 1,2,3,4。
         inputs = tuple(int(part.strip()) for part in args.inputs.split(",") if part.strip())
         specification = build_capset_specification(inputs)
     else:
+        # string-hash demo 直接使用内置测试集，避免 CLI 再增加额外复杂度。
         specification = build_string_hash_specification()
     config = SearchConfig(
         iterations=args.iterations,
@@ -69,6 +78,7 @@ def main() -> None:
     )
 
     if args.llm == "mock":
+        # mock LLM 让整个项目可以完全离线演示。
         llm = MockLLM()
     else:
         if not args.base_url:
