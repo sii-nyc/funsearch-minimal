@@ -20,17 +20,16 @@ STRING_HASH_SEED_PROGRAM = dedent(
 
 
     def main(problem):
-        """Scores one batch of strings by bucket collisions and load variance."""
+        """Scores one batch of strings by how evenly it fills the buckets."""
         strings = problem["strings"]
         num_buckets = problem["num_buckets"]
         buckets = [0] * num_buckets
         for text in strings:
             buckets[hash_string(text) % num_buckets] += 1
 
-        collisions = len(strings) - sum(1 for load in buckets if load)
         expected_load = len(strings) / num_buckets
         variance = sum((load - expected_load) ** 2 for load in buckets) / num_buckets
-        return -(collisions + variance)
+        return -variance
 
 
     def hash_string(s):

@@ -68,7 +68,7 @@ The CLI prints:
 - optional trace directory
 - the full best program currently stored in the database
 
-The string-hash problem is meant as a compact teaching example: `hash_string(s)` stays fixed, FunSearch only mutates `mix_char(h, i, c)`, and the evaluator scores how well the resulting hash spreads several small string families across buckets.
+The string-hash problem is meant as a compact teaching example: `hash_string(s)` stays fixed, FunSearch only mutates `mix_char(h, i, c)`, and the evaluator scores how evenly the resulting hash spreads several small string families across buckets.
 
 ## Saving The Evolution Process
 
