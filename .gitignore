@@ -11,3 +11,6 @@ wheels/
 
 # pdf
 *.pdf
+
+# run file
+runs/
