@@ -127,7 +127,7 @@ def _build_iteration_summary(root: Path, iteration_entry: dict[str, Any]) -> dic
             "aggregate_score": accepted_event.get("aggregate_score"),
             "signature": accepted_event.get("signature"),
             "program_id": accepted_event.get("program_id"),
-            "source_path": _resolve_relative_path(root, accepted_event.get("source_path")),
+            "source_path": _stringify_path(_resolve_relative_path(root, accepted_event.get("source_path"))),
         }
     elif rejected_event is not None:
         status = "rejected"
@@ -155,7 +155,7 @@ def _build_iteration_summary(root: Path, iteration_entry: dict[str, Any]) -> dic
         "best_after_iteration": {
             "best_program_id": completed_event.get("best_program_id"),
             "best_score": completed_event.get("best_score"),
-            "snapshot_path": _resolve_relative_path(root, completed_event.get("snapshot_path")),
+            "snapshot_path": _stringify_path(_resolve_relative_path(root, completed_event.get("snapshot_path"))),
         }
         if completed_event
         else None,
@@ -241,6 +241,12 @@ def _resolve_relative_path(root: Path, relative_path: str | None) -> Path | None
     if not relative_path:
         return None
     return root / relative_path
+
+
+def _stringify_path(path: Path | None) -> str | None:
+    if path is None:
+        return None
+    return str(path)
 
 
 def _build_html() -> str:

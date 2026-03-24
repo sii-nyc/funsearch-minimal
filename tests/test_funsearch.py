@@ -292,6 +292,7 @@ class IntegrationTests(unittest.TestCase):
             self.assertTrue(first_iteration["prompt_text"])
             self.assertTrue(first_iteration["completion_text"])
             self.assertIn(first_iteration["status"], {"accepted", "rejected"})
+            json.dumps(state)
 
 
 class CliTests(unittest.TestCase):
