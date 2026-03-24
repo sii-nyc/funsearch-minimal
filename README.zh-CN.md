@@ -70,6 +70,19 @@ uv run python main.py --llm mock --iterations 8 --islands 4 --reset-interval 4 -
 uv run python main.py --problem string-hash --llm mock --iterations 8 --islands 4 --reset-interval 4
 ```
 
+### 自定义 string-hash 的桶数量和每组字符串数量
+
+```bash
+uv run python main.py \
+  --problem string-hash \
+  --llm mock \
+  --iterations 8 \
+  --islands 4 \
+  --reset-interval 4 \
+  --string-hash-buckets 23 \
+  --string-hash-strings-per-case 12
+```
+
 ### 调用 OpenAI 兼容接口
 
 ```bash

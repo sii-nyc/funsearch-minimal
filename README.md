@@ -52,6 +52,19 @@ Mock LLM on the string-hash demo:
 uv run python main.py --problem string-hash --llm mock --iterations 8 --islands 4 --reset-interval 4
 ```
 
+String-hash demo with custom bucket count and dataset size:
+
+```bash
+uv run python main.py \
+  --problem string-hash \
+  --llm mock \
+  --iterations 8 \
+  --islands 4 \
+  --reset-interval 4 \
+  --string-hash-buckets 23 \
+  --string-hash-strings-per-case 12
+```
+
 OpenAI-compatible API:
 
 ```bash

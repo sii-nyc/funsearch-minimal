@@ -22,6 +22,32 @@ from funsearch.core import ProblemSpecification
 DEFAULT_BUCKETS = 17
 DEFAULT_RANDOM_SEED = 0
 DEFAULT_STRINGS_PER_CASE = 24
+_IDENTIFIER_BASE_STRINGS = (
+    "get_user",
+    "get_users",
+    "get_user_by_id",
+    "get_user_name",
+    "set_user",
+    "set_user_name",
+    "set_user_email",
+    "load_user",
+    "load_user_profile",
+    "save_user",
+    "save_user_profile",
+    "delete_user",
+    "delete_user_cache",
+    "user_to_json",
+    "user_from_json",
+    "parse_user_id",
+    "format_user_name",
+    "update_user",
+    "update_user_name",
+    "update_user_email",
+    "list_users",
+    "list_user_groups",
+    "find_user",
+    "find_user_by_name",
+)
 
 STRING_HASH_SEED_PROGRAM = dedent(
     '''\
@@ -84,41 +110,23 @@ def make_suffixed_strings(count: int = DEFAULT_STRINGS_PER_CASE) -> list[str]:
     return [f"file_{index:03d}.txt" for index in range(1, count + 1)]
 
 
-def make_identifier_strings() -> list[str]:
+def make_identifier_strings(count: int = DEFAULT_STRINGS_PER_CASE) -> list[str]:
     """生成一批相互相似的标识符风格字符串。"""
 
-    return [
-        "get_user",
-        "get_users",
-        "get_user_by_id",
-        "get_user_name",
-        "set_user",
-        "set_user_name",
-        "set_user_email",
-        "load_user",
-        "load_user_profile",
-        "save_user",
-        "save_user_profile",
-        "delete_user",
-        "delete_user_cache",
-        "user_to_json",
-        "user_from_json",
-        "parse_user_id",
-        "format_user_name",
-        "update_user",
-        "update_user_name",
-        "update_user_email",
-        "list_users",
-        "list_user_groups",
-        "find_user",
-        "find_user_by_name",
-    ]
+    if count <= len(_IDENTIFIER_BASE_STRINGS):
+        return list(_IDENTIFIER_BASE_STRINGS[:count])
+
+    identifiers = list(_IDENTIFIER_BASE_STRINGS)
+    for index in range(count - len(_IDENTIFIER_BASE_STRINGS)):
+        identifiers.append(f"user_helper_{index + 1:03d}")
+    return identifiers
 
 
 def build_string_hash_inputs(
     *,
     random_seed: int = DEFAULT_RANDOM_SEED,
     num_buckets: int = DEFAULT_BUCKETS,
+    strings_per_case: int = DEFAULT_STRINGS_PER_CASE,
 ) -> tuple[dict[str, object], ...]:
     """构造一个小而固定的测试集。
 
@@ -132,22 +140,22 @@ def build_string_hash_inputs(
     return (
         {
             "label": "random_lowercase",
-            "strings": make_random_strings(rng),
+            "strings": make_random_strings(rng, count=strings_per_case),
             "num_buckets": num_buckets,
         },
         {
             "label": "shared_prefix",
-            "strings": make_prefixed_strings(),
+            "strings": make_prefixed_strings(strings_per_case),
             "num_buckets": num_buckets,
         },
         {
             "label": "shared_suffix",
-            "strings": make_suffixed_strings(),
+            "strings": make_suffixed_strings(strings_per_case),
             "num_buckets": num_buckets,
         },
         {
             "label": "identifiers",
-            "strings": make_identifier_strings(),
+            "strings": make_identifier_strings(strings_per_case),
             "num_buckets": num_buckets,
         },
     )
@@ -155,11 +163,19 @@ def build_string_hash_inputs(
 
 def build_string_hash_specification(
     inputs: Iterable[dict[str, object]] | None = None,
+    *,
+    random_seed: int = DEFAULT_RANDOM_SEED,
+    num_buckets: int = DEFAULT_BUCKETS,
+    strings_per_case: int = DEFAULT_STRINGS_PER_CASE,
 ) -> ProblemSpecification:
     """构造字符串哈希问题的 `ProblemSpecification`。"""
 
     # 同一次运行里，这些输入会被所有候选程序共享，用作固定评测集。
-    normalized_inputs = tuple(inputs) if inputs is not None else build_string_hash_inputs()
+    normalized_inputs = tuple(inputs) if inputs is not None else build_string_hash_inputs(
+        random_seed=random_seed,
+        num_buckets=num_buckets,
+        strings_per_case=strings_per_case,
+    )
     return ProblemSpecification(
         seed_program=STRING_HASH_SEED_PROGRAM,
         target_function="mix_char",

@@ -16,7 +16,11 @@ import os
 from funsearch.capset import DEFAULT_INPUTS, build_capset_specification
 from funsearch.core import FunSearchRunner, SearchConfig
 from funsearch.llm import MockLLM, OpenAICompatibleLLM
-from funsearch.string_hash import build_string_hash_specification
+from funsearch.string_hash import (
+    DEFAULT_BUCKETS,
+    DEFAULT_STRINGS_PER_CASE,
+    build_string_hash_specification,
+)
 from funsearch.tracing import TraceWriter
 
 
@@ -50,6 +54,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=",".join(str(value) for value in DEFAULT_INPUTS),
         help="Comma-separated cap set dimensions to evaluate when --problem=capset.",
     )
+    parser.add_argument(
+        "--string-hash-buckets",
+        type=int,
+        default=DEFAULT_BUCKETS,
+        help="Bucket count for --problem=string-hash.",
+    )
+    parser.add_argument(
+        "--string-hash-strings-per-case",
+        type=int,
+        default=DEFAULT_STRINGS_PER_CASE,
+        help="Number of strings in each string-hash evaluation case.",
+    )
     parser.add_argument("--temperature", type=float, default=0.8)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
@@ -68,8 +84,14 @@ def main() -> None:
         inputs = tuple(int(part.strip()) for part in args.inputs.split(",") if part.strip())
         specification = build_capset_specification(inputs)
     else:
-        # string-hash demo 直接使用内置测试集，避免 CLI 再增加额外复杂度。
-        specification = build_string_hash_specification()
+        if args.string_hash_buckets <= 0:
+            raise SystemExit("--string-hash-buckets must be a positive integer")
+        if args.string_hash_strings_per_case <= 0:
+            raise SystemExit("--string-hash-strings-per-case must be a positive integer")
+        specification = build_string_hash_specification(
+            num_buckets=args.string_hash_buckets,
+            strings_per_case=args.string_hash_strings_per_case,
+        )
     config = SearchConfig(
         iterations=args.iterations,
         islands=args.islands,

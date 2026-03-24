@@ -16,6 +16,8 @@ from funsearch.llm import MockLLM
 from funsearch.tracing import TraceWriter
 from funsearch.prompting import build_prompt, extract_function_source, extract_generated_function, replace_function
 from funsearch.string_hash import (
+    DEFAULT_BUCKETS,
+    DEFAULT_STRINGS_PER_CASE,
     build_string_hash_inputs,
     build_string_hash_specification,
     make_identifier_strings,
@@ -51,6 +53,19 @@ class StringHashTests(unittest.TestCase):
         self.assertEqual(make_suffixed_strings()[:2], ["file_001.txt", "file_002.txt"])
         self.assertIn("get_user_by_id", make_identifier_strings())
         self.assertEqual(len(make_random_strings(random.Random(3))), 24)
+
+    def test_string_hash_inputs_respect_bucket_and_case_sizes(self) -> None:
+        inputs = build_string_hash_inputs(num_buckets=23, strings_per_case=7)
+
+        self.assertEqual(len(inputs), 4)
+        self.assertTrue(all(case["num_buckets"] == 23 for case in inputs))
+        self.assertTrue(all(len(case["strings"]) == 7 for case in inputs))
+
+    def test_string_hash_specification_uses_custom_dataset_size(self) -> None:
+        specification = build_string_hash_specification(num_buckets=19, strings_per_case=5)
+
+        self.assertTrue(all(case["num_buckets"] == 19 for case in specification.inputs))
+        self.assertTrue(all(len(case["strings"]) == 5 for case in specification.inputs))
 
     def test_seed_program_is_valid(self) -> None:
         specification = build_string_hash_specification()
@@ -303,6 +318,27 @@ class CliTests(unittest.TestCase):
     def test_problem_flag_accepts_string_hash(self) -> None:
         args = build_parser().parse_args(["--problem", "string-hash", "--llm", "mock"])
         self.assertEqual(args.problem, "string-hash")
+
+    def test_string_hash_cli_flags_have_expected_defaults(self) -> None:
+        args = build_parser().parse_args(["--problem", "string-hash", "--llm", "mock"])
+        self.assertEqual(args.string_hash_buckets, DEFAULT_BUCKETS)
+        self.assertEqual(args.string_hash_strings_per_case, DEFAULT_STRINGS_PER_CASE)
+
+    def test_string_hash_cli_flags_can_be_overridden(self) -> None:
+        args = build_parser().parse_args(
+            [
+                "--problem",
+                "string-hash",
+                "--llm",
+                "mock",
+                "--string-hash-buckets",
+                "23",
+                "--string-hash-strings-per-case",
+                "7",
+            ]
+        )
+        self.assertEqual(args.string_hash_buckets, 23)
+        self.assertEqual(args.string_hash_strings_per_case, 7)
 
 
 if __name__ == "__main__":
