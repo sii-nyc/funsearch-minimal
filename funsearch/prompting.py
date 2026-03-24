@@ -33,7 +33,11 @@ def build_prompt(seed_program: str, target_function: str, sampled_programs: Iter
     next_index = len(versioned_blocks)
     best_program = max(sampled_list, key=lambda program: program.aggregate_score)
     score_lines = [
-        f"# {target_function}_v{index}: signature={program.signature}, aggregate_score={program.aggregate_score}"
+        (
+            f"# {target_function}_v{index}: "
+            f"signature={_format_signature(program.signature)}, "
+            f"aggregate_score={_format_float(program.aggregate_score)}"
+        )
         for index, program in enumerate(sampled_list)
     ]
     prompt_lines = [
@@ -50,8 +54,8 @@ def build_prompt(seed_program: str, target_function: str, sampled_programs: Iter
         "",
         "# Previous versions are shown below together with the scores they achieved.",
         *score_lines,
-        f"# Best aggregate_score among the shown versions: {best_program.aggregate_score}",
-        f"# Best signature among the shown versions: {best_program.signature}",
+        f"# Best aggregate_score among the shown versions: {_format_float(best_program.aggregate_score)}",
+        f"# Best signature among the shown versions: {_format_signature(best_program.signature)}",
         "",
         "# Fixed program skeleton (read-only, shown for context):",
         _extract_fixed_skeleton(seed_program, target_function).rstrip(),
@@ -153,6 +157,15 @@ def _extract_fixed_skeleton(program_source: str, target_function: str) -> str:
     fixed_module = ast.Module(body=fixed_body, type_ignores=[])
     ast.fix_missing_locations(fixed_module)
     return ast.unparse(fixed_module)
+
+
+def _format_signature(signature: tuple[float, ...]) -> str:
+    return "(" + ", ".join(_format_float(value) for value in signature) + ")"
+
+
+def _format_float(value: float) -> str:
+    formatted = f"{value:.3f}".rstrip("0").rstrip(".")
+    return "0" if formatted == "-0" else formatted
 
 
 def _summarize_program_for_prompt(program_source: str, target_function: str) -> list[str]:

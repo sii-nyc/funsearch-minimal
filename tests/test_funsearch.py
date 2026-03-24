@@ -160,6 +160,28 @@ class PromptingTests(unittest.TestCase):
         self.assertNotIn("def mix_char(h, i, c):", prompt)
         self.assertIn("def mix_char_v1(h, i, c):", prompt)
 
+    def test_prompt_rounds_scores_and_signatures_for_readability(self) -> None:
+        specification = build_string_hash_specification()
+        seed_function = extract_function_source(specification.seed_program, specification.target_function)
+        records = [
+            ProgramRecord(
+                source=specification.seed_program,
+                function_source=seed_function,
+                signature=(-1.14792899408284, -0.6863905325443788, -0.5325443786982249, -0.8402366863905326),
+                aggregate_score=-0.8017751479289941,
+                source_length=len(specification.seed_program),
+                created_at=0,
+            )
+        ]
+
+        prompt = build_prompt(specification.seed_program, specification.target_function, records)
+
+        self.assertIn("aggregate_score=-0.802", prompt)
+        self.assertIn("Best aggregate_score among the shown versions: -0.802", prompt)
+        self.assertIn("signature=(-1.148, -0.686, -0.533, -0.84)", prompt)
+        self.assertNotIn("-0.8017751479289941", prompt)
+        self.assertNotIn("-1.14792899408284", prompt)
+
     def test_extract_generated_function_from_fenced_code(self) -> None:
         completion = """Here is a candidate.
 
