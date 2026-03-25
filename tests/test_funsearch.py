@@ -373,10 +373,11 @@ class IntegrationTests(unittest.TestCase):
 
         self.assertIn("=== FunSearch Run Started ===", report_text)
         self.assertIn("=== Iteration 1/2 ===", report_text)
-        self.assertIn("[Selected Island]", report_text)
-        self.assertIn("[Prompt]", report_text)
-        self.assertIn("[Completion]", report_text)
-        self.assertIn("[Post Snapshot]", report_text)
+        self.assertIn("problem_summary:", report_text)
+        self.assertIn("sampled_program_ids:", report_text)
+        self.assertIn("[Generated Function]", report_text)
+        self.assertIn("[Islands]", report_text)
+        self.assertNotIn("[Prompt]", report_text)
         self.assertIn("=== FunSearch Run Completed ===", report_text)
 
 

@@ -29,6 +29,7 @@ from funsearch.prompting import (
     extract_function_source,
     extract_generated_function,
     replace_function,
+    summarize_program_for_prompt,
 )
 
 if TYPE_CHECKING:
@@ -292,6 +293,10 @@ class FunSearchRunner:
                 prompt_versions=self.config.prompt_versions,
                 random_seed=self.config.random_seed,
                 trace_dir=trace_root,
+                problem_summary=summarize_program_for_prompt(
+                    self.specification.seed_program,
+                    self.specification.target_function,
+                ),
                 seed_score=seed_result.aggregate_score,
                 seed_signature=seed_result.signature,
             )
@@ -471,13 +476,19 @@ class FunSearchRunner:
                     "status": "accepted" if accepted_record is not None else "rejected",
                     "selected_island_index": island_index,
                     "sampled_programs": sampled_program_payloads,
+                    "sampled_program_ids": [
+                        record.program_id for record in sampled_programs
+                    ],
                     "selected_island": selected_island_summary,
-                    "prompt_path": prompt_path,
-                    "prompt_text": prompt,
+                    "selected_island_clusters": [
+                        [
+                            program["program_id"]
+                            for program in cluster.get("programs", [])
+                        ]
+                        for cluster in selected_island_summary.get("clusters", [])
+                    ],
                     "completion_path": completion_path,
-                    "completion_text": completion,
-                    "candidate_program_path": candidate_path,
-                    "candidate_program_text": candidate_program,
+                    "generated_function_text": generated_function,
                     "score_info": score_info,
                     "reset_actions": reset_action_payloads,
                     "post_snapshot": build_database_snapshot_summary(

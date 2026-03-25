@@ -50,7 +50,7 @@ def build_prompt(seed_program: str, target_function: str, sampled_programs: Iter
         "# Do not include markdown fences, explanations, tests, or any extra text outside the function.",
         "",
         "# Problem summary extracted from the fixed program:",
-        *[f"# - {line}" for line in _summarize_program_for_prompt(seed_program, target_function)],
+        *[f"# - {line}" for line in summarize_program_for_prompt(seed_program, target_function)],
         "",
         "# Previous versions are shown below together with the scores they achieved.",
         *score_lines,
@@ -168,7 +168,7 @@ def _format_float(value: float) -> str:
     return "0" if formatted == "-0" else formatted
 
 
-def _summarize_program_for_prompt(program_source: str, target_function: str) -> list[str]:
+def summarize_program_for_prompt(program_source: str, target_function: str) -> list[str]:
     """提取固定程序骨架中的问题摘要，帮助模型理解评分目标。"""
 
     module = ast.parse(program_source)

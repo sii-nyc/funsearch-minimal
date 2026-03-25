@@ -1,7 +1,8 @@
 """把搜索过程直接打印到命令行。
 
-这个模块不依赖额外进程或浏览器，而是在主搜索循环运行时
-按轮次把关键记录直接输出到 stdout。
+默认输出面向“边跑边看”的场景：
+- 运行开始时说明固定问题上下文
+- 每轮只展示抽样、生成结果和当前数据库状态
 """
 
 from __future__ import annotations
@@ -9,12 +10,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from typing import Any, TextIO
-
-from funsearch.trace_formatting import (
-    SECTION_ORDER,
-    SECTION_TITLES,
-    build_iteration_section_lines,
-)
 
 
 class ConsoleRunReporter:
@@ -36,22 +31,22 @@ class ConsoleRunReporter:
         prompt_versions: int,
         random_seed: int,
         trace_dir: str | None,
+        problem_summary: list[str],
         seed_score: float,
         seed_signature: tuple[float, ...],
     ) -> None:
         lines = [
             "=== FunSearch Run Started ===",
-            (
-                f"problem: target={target_function} entrypoint={entrypoint} "
-                f"inputs={input_count}"
-            ),
+            f"problem: target={target_function} entrypoint={entrypoint} inputs={input_count}",
             (
                 f"config: llm={llm_backend} iterations={iterations} islands={islands} "
-                f"reset_interval={reset_interval} prompt_versions={prompt_versions} "
-                f"seed={random_seed}"
+                f"reset_interval={reset_interval} prompt_versions={prompt_versions} seed={random_seed}"
             ),
             f"seed: score={seed_score} signature={list(seed_signature)}",
             f"trace_dir: {trace_dir or 'disabled'}",
+            "prompt: fixed skeleton and instructions are reused every iteration; only the sampled versions change",
+            "problem_summary:",
+            *[f"- {line}" for line in problem_summary],
             "",
         ]
         self._write_lines(lines)
@@ -66,18 +61,53 @@ class ConsoleRunReporter:
         iteration_item: dict[str, Any],
     ) -> None:
         status = iteration_item.get("status", "unknown")
+        score_info = iteration_item.get("score_info") or {}
         lines = [
             f"=== Iteration {iteration + 1}/{total_iterations} ===",
             (
                 f"status: {status} | selected_island={iteration_item.get('selected_island_index')} "
                 f"| current_best_score={current_best_score} | current_best_program_id={current_best_program_id}"
             ),
+            f"sampled_program_ids: {iteration_item.get('sampled_program_ids', [])}",
+            f"selected_island_clusters: {iteration_item.get('selected_island_clusters', [])}",
             "",
+            "[Generated Function]",
         ]
-        for section in SECTION_ORDER:
-            lines.append(f"[{SECTION_TITLES[section]}]")
-            lines.extend(build_iteration_section_lines(iteration_item, section))
-            lines.append("")
+
+        generated_function = iteration_item.get("generated_function_text")
+        if generated_function:
+            lines.extend(generated_function.splitlines())
+        else:
+            lines.append("No valid target function extracted from the completion.")
+
+        lines.extend(["", "[Result]"])
+        if status == "accepted":
+            lines.extend(
+                [
+                    (
+                        f"accepted: program_id={score_info.get('program_id')} "
+                        f"aggregate_score={score_info.get('aggregate_score')} "
+                        f"signature={score_info.get('signature')}"
+                    ),
+                    f"source_path: {score_info.get('source_path')}",
+                ]
+            )
+        else:
+            lines.append(f"rejected: {score_info.get('reason')}")
+
+        if iteration_item.get("reset_actions"):
+            lines.extend(["", "[Reset Actions]"])
+            for action in iteration_item["reset_actions"]:
+                lines.append(
+                    (
+                        f"island={action.get('island_index')} <- donor_island={action.get('donor_island_index')} "
+                        f"donor_program_id={action.get('donor_program_id')} new_program_id={action.get('new_program_id')}"
+                    )
+                )
+
+        lines.extend(["", "[Islands]"])
+        lines.extend(_build_database_lines(iteration_item.get("post_snapshot") or {}))
+        lines.append("")
         self._write_lines(lines)
 
     def report_run_completed(
@@ -105,6 +135,32 @@ class ConsoleRunReporter:
         self.output.flush()
 
 
+def _format_cluster_program_ids(clusters: list[dict[str, Any]]) -> list[list[int]]:
+    cluster_groups = []
+    for cluster in clusters:
+        program_ids = [program["program_id"] for program in cluster.get("programs", [])]
+        cluster_groups.append(program_ids)
+    return cluster_groups
+
+
+def _build_database_lines(snapshot: dict[str, Any]) -> list[str]:
+    if not snapshot:
+        return ["Database snapshot is not available."]
+
+    lines = [
+        f"evaluated_candidates: {snapshot.get('evaluated_candidates')}",
+        f"best_program_id: {snapshot.get('best_program_id')}",
+    ]
+    for island in snapshot.get("islands", []):
+        lines.append(
+            (
+                f"island={island.get('index')} best={island.get('best_program_id')} "
+                f"clusters={_format_cluster_program_ids(island.get('clusters', []))}"
+            )
+        )
+    return lines
+
+
 def build_selected_island_summary(
     *,
     island_index: int,
@@ -126,12 +182,34 @@ def build_selected_island_summary(
             }
         )
     programs.sort(key=lambda item: (item["aggregate_score"], -item["program_id"]), reverse=True)
+    clusters = []
+    for signature, records in island.clusters.items():
+        clusters.append(
+            {
+                "signature": list(signature),
+                "programs": [
+                    {
+                        "program_id": record.program_id,
+                        "aggregate_score": record.aggregate_score,
+                    }
+                    for record in records
+                ],
+            }
+        )
+    clusters.sort(
+        key=lambda cluster: (
+            max(program["aggregate_score"] for program in cluster["programs"]),
+            -min(program["program_id"] for program in cluster["programs"]),
+        ),
+        reverse=True,
+    )
     return {
         "index": island_index,
         "best_program_id": island.best_program().program_id,
         "program_count": len(programs),
         "cluster_count": len(island.clusters),
         "programs": programs,
+        "clusters": clusters,
     }
 
 
@@ -164,6 +242,27 @@ def build_database_snapshot_summary(
     program_source_paths = program_source_paths or {}
     islands = []
     for index, island in enumerate(database.islands):
+        clusters = []
+        for signature, records in island.clusters.items():
+            clusters.append(
+                {
+                    "signature": list(signature),
+                    "programs": [
+                        {
+                            "program_id": record.program_id,
+                            "aggregate_score": record.aggregate_score,
+                        }
+                        for record in records
+                    ],
+                }
+            )
+        clusters.sort(
+            key=lambda cluster: (
+                max(program["aggregate_score"] for program in cluster["programs"]),
+                -min(program["program_id"] for program in cluster["programs"]),
+            ),
+            reverse=True,
+        )
         islands.append(
             {
                 "index": index,
@@ -171,6 +270,7 @@ def build_database_snapshot_summary(
                 "program_count": len(island.all_programs()),
                 "cluster_count": len(island.clusters),
                 "best_program_path": program_source_paths.get(island.best_program().program_id),
+                "clusters": clusters,
             }
         )
     return {
