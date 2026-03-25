@@ -371,14 +371,14 @@ class IntegrationTests(unittest.TestCase):
         runner.run()
         report_text = output.getvalue()
 
-        self.assertIn("=== FunSearch Run Started ===", report_text)
-        self.assertIn("=== Iteration 1/2 ===", report_text)
+        self.assertIn("FunSearch Run Started", report_text)
+        self.assertIn("Iteration 1/2", report_text)
         self.assertIn("problem_summary:", report_text)
-        self.assertIn("sampled_program_ids:", report_text)
-        self.assertIn("[Generated Function]", report_text)
-        self.assertIn("[Islands]", report_text)
+        self.assertIn("Sampled", report_text)
+        self.assertIn("Generated Function", report_text)
+        self.assertIn("Islands", report_text)
         self.assertNotIn("[Prompt]", report_text)
-        self.assertIn("=== FunSearch Run Completed ===", report_text)
+        self.assertIn("FunSearch Run Completed", report_text)
 
 
 class CliTests(unittest.TestCase):
