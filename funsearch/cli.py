@@ -51,6 +51,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--islands", type=int, default=4)
     parser.add_argument("--reset-interval", type=int, default=10)
     parser.add_argument(
+        "--prompt-versions",
+        type=int,
+        default=2,
+        help="Number of historical versions sampled into each best-shot prompt.",
+    )
+    parser.add_argument(
         "--inputs",
         default=",".join(str(value) for value in DEFAULT_INPUTS),
         help="Comma-separated cap set dimensions to evaluate when --problem=capset.",
@@ -98,10 +104,13 @@ def main() -> None:
             num_buckets=args.string_hash_buckets,
             strings_per_case=args.string_hash_strings_per_case,
         )
+    if args.prompt_versions <= 0:
+        raise SystemExit("--prompt-versions must be a positive integer")
     config = SearchConfig(
         iterations=args.iterations,
         islands=args.islands,
         reset_interval=args.reset_interval,
+        prompt_versions=args.prompt_versions,
         random_seed=args.seed,
     )
 

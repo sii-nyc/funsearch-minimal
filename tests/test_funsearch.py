@@ -390,6 +390,10 @@ class CliTests(unittest.TestCase):
         args = build_parser().parse_args(["--llm", "mock"])
         self.assertFalse(args.no_live_report)
 
+    def test_prompt_versions_flag_has_expected_default(self) -> None:
+        args = build_parser().parse_args(["--llm", "mock"])
+        self.assertEqual(args.prompt_versions, 2)
+
     def test_problem_flag_accepts_string_hash(self) -> None:
         args = build_parser().parse_args(["--problem", "string-hash", "--llm", "mock"])
         self.assertEqual(args.problem, "string-hash")
@@ -406,12 +410,15 @@ class CliTests(unittest.TestCase):
                 "string-hash",
                 "--llm",
                 "mock",
+                "--prompt-versions",
+                "4",
                 "--string-hash-buckets",
                 "23",
                 "--string-hash-strings-per-case",
                 "7",
             ]
         )
+        self.assertEqual(args.prompt_versions, 4)
         self.assertEqual(args.string_hash_buckets, 23)
         self.assertEqual(args.string_hash_strings_per_case, 7)
 

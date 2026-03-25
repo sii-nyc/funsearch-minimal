@@ -61,9 +61,12 @@ uv run python main.py \
   --iterations 8 \
   --islands 4 \
   --reset-interval 4 \
+  --prompt-versions 4 \
   --string-hash-buckets 23 \
   --string-hash-strings-per-case 12
 ```
+
+Use `--prompt-versions` to control how many historical programs are included in each best-shot prompt.
 
 OpenAI-compatible API:
 
