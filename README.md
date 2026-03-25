@@ -97,7 +97,7 @@ During the run, the CLI now also streams per-iteration records directly to stdou
 - reset actions
 - a short post-iteration database snapshot summary
 
-The string-hash problem is meant as a compact teaching example: `hash_string(s)` stays fixed, FunSearch only mutates `mix_char(h, i, c)`, and the evaluator scores how evenly the resulting hash spreads several small string families across buckets.
+The string-hash problem is meant as a compact teaching example: `hash_string(s)` stays fixed, FunSearch only mutates `mix_char(h, i, c)`, the seed starts from an intentionally trivial mixer, and the evaluator scores how evenly the resulting hash spreads several small string families across buckets.
 
 ## Saving The Evolution Process
 

@@ -446,7 +446,7 @@ CLI 最终会打印：
 
 ### `string-hash` evaluator
 
-定义也在 seed program 中，逻辑是：
+定义也在 seed program 中。这里的 seed `mix_char` 故意很弱，只做非常基础的字符累加；evaluator 的逻辑是：
 
 - 取一组固定字符串
 - 用固定的 `hash_string(s)` 逐个求 hash

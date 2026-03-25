@@ -77,7 +77,7 @@ STRING_HASH_SEED_PROGRAM = dedent(
 
     def mix_char(h, i, c):
         """Mixes one character into the running hash state."""
-        return (h * 33 + c + i) & 0xFFFFFFFF
+        return (h + c) & 0xFFFFFFFF
     '''
 )
 
