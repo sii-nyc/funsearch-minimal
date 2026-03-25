@@ -16,6 +16,12 @@ import threading
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable
 
+from funsearch.console_reporter import (
+    build_database_snapshot_summary,
+    build_program_source_path,
+    build_sampled_programs_summary,
+    build_selected_island_summary,
+)
 from funsearch.database import ProgramDatabase, ProgramRecord
 from funsearch.llm import LLMClient
 from funsearch.prompting import (
@@ -26,6 +32,7 @@ from funsearch.prompting import (
 )
 
 if TYPE_CHECKING:
+    from funsearch.console_reporter import ConsoleRunReporter
     from funsearch.tracing import TraceWriter
 
 
@@ -201,6 +208,7 @@ class FunSearchRunner:
         llm: LLMClient,
         config: SearchConfig,
         trace_writer: TraceWriter | None = None,
+        progress_reporter: ConsoleRunReporter | None = None,
     ) -> None:
         self.specification = specification
         self.llm = llm
@@ -208,6 +216,7 @@ class FunSearchRunner:
         # 所有随机性统一从这里来，方便复现。
         self.rng = random.Random(config.random_seed)
         self.trace_writer = trace_writer
+        self.progress_reporter = progress_reporter
 
     def run(self) -> SearchResult:
         """执行完整搜索。
@@ -249,6 +258,9 @@ class FunSearchRunner:
             cluster_temperature=self.config.cluster_temperature,
             program_temperature=self.config.program_temperature,
         )
+        trace_root = (
+            str(self.trace_writer.root_dir) if self.trace_writer is not None else None
+        )
         if self.trace_writer is not None:
             self.trace_writer.write_run_metadata(
                 specification=self.specification,
@@ -268,11 +280,45 @@ class FunSearchRunner:
                 name="initial_database",
                 snapshot_path=initial_snapshot,
             )
+        if self.progress_reporter is not None:
+            self.progress_reporter.report_run_started(
+                target_function=self.specification.target_function,
+                entrypoint=self.specification.entrypoint,
+                input_count=len(self.specification.inputs),
+                llm_backend=type(self.llm).__name__,
+                iterations=self.config.iterations,
+                islands=self.config.islands,
+                reset_interval=self.config.reset_interval,
+                prompt_versions=self.config.prompt_versions,
+                random_seed=self.config.random_seed,
+                trace_dir=trace_root,
+                seed_score=seed_result.aggregate_score,
+                seed_signature=seed_result.signature,
+            )
 
         for iteration in range(self.config.iterations):
             # 从某个岛抽样历史程序，然后构造一个“best-shot” prompt。
             island_index, sampled_programs = database.sample_prompt_records(
                 self.config.prompt_versions
+            )
+            selected_island_summary = build_selected_island_summary(
+                island_index=island_index,
+                island=database.islands[island_index],
+                program_source_paths={
+                    record.program_id: build_program_source_path(
+                        record.program_id, trace_root
+                    )
+                    for record in database.islands[island_index].all_programs()
+                },
+            )
+            sampled_program_payloads = build_sampled_programs_summary(
+                sampled_programs,
+                program_source_paths={
+                    record.program_id: build_program_source_path(
+                        record.program_id, trace_root
+                    )
+                    for record in sampled_programs
+                },
             )
             prompt = build_prompt(
                 seed_program=self.specification.seed_program,
@@ -289,12 +335,10 @@ class FunSearchRunner:
                     prompt_path=prompt_path,
                     sampled_programs=[
                         {
-                            "program_id": record.program_id,
-                            "aggregate_score": record.aggregate_score,
-                            "signature": list(record.signature),
+                            **payload,
                             "source_path": self.trace_writer.write_program(record),
                         }
-                        for record in sampled_programs
+                        for record, payload in zip(sampled_programs, sampled_program_payloads)
                     ],
                 )
             # LLM 只负责提出下一个目标函数版本。
@@ -318,13 +362,16 @@ class FunSearchRunner:
                 function_name=generated_name,
                 renamed_to=self.specification.target_function,
             )
+            candidate_program = None
+            candidate_path = None
+            accepted_record = None
+            rejection_reason = None
             if generated_function is not None:
                 candidate_program = replace_function(
                     self.specification.seed_program,
                     self.specification.target_function,
                     generated_function,
                 )
-                candidate_path = None
                 if self.trace_writer is not None:
                     candidate_path = self.trace_writer.write_candidate_program(
                         iteration, candidate_program
@@ -340,7 +387,7 @@ class FunSearchRunner:
                 )
                 if candidate_result is not None:
                     # 只有“可执行且分数合法”的程序才会进入数据库。
-                    record = database.add_program(
+                    accepted_record = database.add_program(
                         island_index=island_index,
                         source=candidate_program,
                         function_source=generated_function,
@@ -352,10 +399,10 @@ class FunSearchRunner:
                             "candidate_accepted",
                             iteration=iteration,
                             island_index=island_index,
-                            program_id=record.program_id,
-                            aggregate_score=record.aggregate_score,
-                            signature=list(record.signature),
-                            source_path=self.trace_writer.write_program(record),
+                            program_id=accepted_record.program_id,
+                            aggregate_score=accepted_record.aggregate_score,
+                            signature=list(accepted_record.signature),
+                            source_path=self.trace_writer.write_program(accepted_record),
                         )
                 elif self.trace_writer is not None:
                     self.trace_writer.log_event(
@@ -365,42 +412,96 @@ class FunSearchRunner:
                         reason=rejection_reason,
                         candidate_program_path=candidate_path,
                     )
-            elif self.trace_writer is not None:
-                self.trace_writer.log_event(
-                    "candidate_rejected",
-                    iteration=iteration,
-                    island_index=island_index,
-                    reason=f"generated_function_not_found: {generated_name}",
-                    completion_path=completion_path,
-                )
+            else:
+                rejection_reason = f"generated_function_not_found: {generated_name}"
+                if self.trace_writer is not None:
+                    self.trace_writer.log_event(
+                        "candidate_rejected",
+                        iteration=iteration,
+                        island_index=island_index,
+                        reason=rejection_reason,
+                        completion_path=completion_path,
+                    )
 
             # reset_interval 是按“已评估候选数”触发的简化版 reset。
             reset_actions = database.record_evaluation(self.config.reset_interval)
+            reset_action_payloads = [
+                {
+                    "island_index": action.island_index,
+                    "donor_island_index": action.donor_island_index,
+                    "donor_program_id": action.donor_program_id,
+                    "new_program_id": action.new_program_id,
+                }
+                for action in reset_actions
+            ]
             if self.trace_writer is not None and reset_actions:
                 self.trace_writer.log_event(
                     "islands_reset",
                     iteration=iteration,
-                    actions=[
-                        {
-                            "island_index": action.island_index,
-                            "donor_island_index": action.donor_island_index,
-                            "donor_program_id": action.donor_program_id,
-                            "new_program_id": action.new_program_id,
-                        }
-                        for action in reset_actions
-                    ],
+                    actions=reset_action_payloads,
                 )
+            current_best = database.best_program()
+            snapshot_path = None
             if self.trace_writer is not None:
                 snapshot_path = self.trace_writer.write_snapshot(
                     f"iteration_{iteration:04d}", database
                 )
-                current_best = database.best_program()
                 self.trace_writer.log_event(
                     "iteration_completed",
                     iteration=iteration,
                     best_program_id=current_best.program_id,
                     best_score=current_best.aggregate_score,
                     snapshot_path=snapshot_path,
+                )
+            if self.progress_reporter is not None:
+                score_info = (
+                    {
+                        "aggregate_score": accepted_record.aggregate_score,
+                        "signature": list(accepted_record.signature),
+                        "program_id": accepted_record.program_id,
+                        "source_path": build_program_source_path(
+                            accepted_record.program_id, trace_root
+                        ),
+                    }
+                    if accepted_record is not None
+                    else {"reason": rejection_reason}
+                )
+                iteration_item = {
+                    "iteration": iteration,
+                    "status": "accepted" if accepted_record is not None else "rejected",
+                    "selected_island_index": island_index,
+                    "sampled_programs": sampled_program_payloads,
+                    "selected_island": selected_island_summary,
+                    "prompt_path": prompt_path,
+                    "prompt_text": prompt,
+                    "completion_path": completion_path,
+                    "completion_text": completion,
+                    "candidate_program_path": candidate_path,
+                    "candidate_program_text": candidate_program,
+                    "score_info": score_info,
+                    "reset_actions": reset_action_payloads,
+                    "post_snapshot": build_database_snapshot_summary(
+                        database,
+                        program_source_paths={
+                            record.program_id: build_program_source_path(
+                                record.program_id, trace_root
+                            )
+                            for island in database.islands
+                            for record in island.all_programs()
+                        },
+                    ),
+                    "best_after_iteration": {
+                        "best_program_id": current_best.program_id,
+                        "best_score": current_best.aggregate_score,
+                        "snapshot_path": snapshot_path,
+                    },
+                }
+                self.progress_reporter.report_iteration(
+                    iteration=iteration,
+                    total_iterations=self.config.iterations,
+                    current_best_score=current_best.aggregate_score,
+                    current_best_program_id=current_best.program_id,
+                    iteration_item=iteration_item,
                 )
 
         best = database.best_program()
@@ -414,6 +515,13 @@ class FunSearchRunner:
                 best_score=best.aggregate_score,
                 best_signature=list(best.signature),
                 final_snapshot_path=final_snapshot,
+            )
+        if self.progress_reporter is not None:
+            self.progress_reporter.report_run_completed(
+                best_score=best.aggregate_score,
+                best_signature=best.signature,
+                evaluated_candidates=database.evaluated_candidates,
+                trace_dir=trace_root,
             )
         return SearchResult(
             best_program=best.source,

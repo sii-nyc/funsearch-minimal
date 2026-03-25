@@ -109,21 +109,15 @@ uv run python main.py \
   --trace-dir runs/hash-trace
 ```
 
-### 打开 trace 可视化界面
+### 打开 trace 命令行可视化界面
 
-先生成 trace，再启动本地 dashboard：
+先生成 trace，再启动终端 viewer：
 
 ```bash
-uv run python -m funsearch.trace_viewer --trace-dir runs/hash-trace --port 8765
+uv run python -m funsearch.trace_viewer --trace-dir runs/hash-trace
 ```
 
-然后在浏览器里打开：
-
-```text
-http://127.0.0.1:8765
-```
-
-这个页面会自动刷新，适合边跑边看。它会集中展示：
+这个界面会在终端里自动刷新，适合边跑边看。它会集中展示：
 
 - 当前运行状态
 - 已完成到第几轮
@@ -136,6 +130,15 @@ http://127.0.0.1:8765
 - 候选是否通过评估
 - 分数或拒绝原因
 - 本轮是否触发 reset
+
+常用按键：
+
+- `←` / `→` 或 `h` / `l`：上一轮 / 下一轮
+- `[` / `]` 或 `tab`：切换详情 section
+- `j` / `k`：滚动当前 section
+- `f`：切换是否自动跟随最新轮次
+- `r`：立即刷新
+- `q`：退出
 
 ## 所有命令行参数说明
 
@@ -365,6 +368,23 @@ CLI 最终会打印：
 - `Best program`
   含义：当前数据库中最佳程序的完整源码
 
+在运行过程中，CLI 现在还会默认把每一轮的记录直接输出到终端，包括：
+
+- 当前选中的 island 以及它里面的程序
+- 用来构造 prompt 的历史程序
+- prompt 全文
+- 模型 completion 原文
+- 重建出的 candidate program
+- 候选接受 / 拒绝结果
+- reset 动作
+- 本轮结束后的数据库摘要
+
+如果你只想看最终结果，不想看中间每轮记录，可以加：
+
+```bash
+--no-live-report
+```
+
 ## `Best signature` 是什么
 
 这是理解 FunSearch 的一个关键概念。
@@ -409,7 +429,7 @@ CLI 最终会打印：
 3. `events.jsonl`
 4. `snapshots/`
 
-不过如果你不想手工在这些文件之间来回切换，更推荐直接使用上面的 `trace_viewer`。
+不过现在默认更推荐直接看主命令运行时输出的内嵌记录；如果你想在运行结束后再回看 trace，仍然可以使用上面的终端版 `trace_viewer`。
 
 ## 两个问题的 evaluator 分别在做什么
 

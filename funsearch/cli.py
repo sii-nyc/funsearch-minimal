@@ -14,6 +14,7 @@ import argparse
 import os
 
 from funsearch.capset import DEFAULT_INPUTS, build_capset_specification
+from funsearch.console_reporter import ConsoleRunReporter
 from funsearch.core import FunSearchRunner, SearchConfig
 from funsearch.llm import MockLLM, OpenAICompatibleLLM
 from funsearch.string_hash import (
@@ -72,6 +73,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--trace-dir",
         help="Optional empty directory where prompts, completions, events, and database snapshots are written.",
     )
+    parser.add_argument(
+        "--no-live-report",
+        action="store_true",
+        help="Do not stream per-iteration records to stdout during the run.",
+    )
     return parser
 
 
@@ -115,11 +121,13 @@ def main() -> None:
         )
 
     trace_writer = TraceWriter(args.trace_dir) if args.trace_dir else None
+    progress_reporter = None if args.no_live_report else ConsoleRunReporter()
     result = FunSearchRunner(
         specification=specification,
         llm=llm,
         config=config,
         trace_writer=trace_writer,
+        progress_reporter=progress_reporter,
     ).run()
     print(f"Best aggregate score: {result.best_score}")
     print(f"Best signature: {result.best_signature}")

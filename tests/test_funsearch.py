@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import math
 import random
@@ -10,6 +11,7 @@ from textwrap import dedent
 
 from funsearch.capset import build_capset_specification, can_add_to_cap_set, is_cap_set
 from funsearch.cli import build_parser
+from funsearch.console_reporter import ConsoleRunReporter
 from funsearch.core import FunSearchRunner, SearchConfig, evaluate_program
 from funsearch.database import Island, ProgramDatabase, ProgramRecord
 from funsearch.llm import MockLLM
@@ -25,7 +27,7 @@ from funsearch.string_hash import (
     make_random_strings,
     make_suffixed_strings,
 )
-from funsearch.trace_viewer import load_trace_state
+from funsearch.trace_viewer import build_iteration_section_lines, build_run_summary_lines, load_trace_state
 
 
 class CapSetTests(unittest.TestCase):
@@ -331,11 +333,61 @@ class IntegrationTests(unittest.TestCase):
             self.assertIn(first_iteration["status"], {"accepted", "rejected"})
             json.dumps(state)
 
+    def test_trace_viewer_builds_terminal_sections(self) -> None:
+        specification = build_string_hash_specification()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            trace_dir = f"{temp_dir}/trace"
+            FunSearchRunner(
+                specification=specification,
+                llm=MockLLM(),
+                config=SearchConfig(iterations=2, islands=2, reset_interval=2, random_seed=0),
+                trace_writer=TraceWriter(trace_dir),
+            ).run()
+
+            state = load_trace_state(trace_dir)
+            summary_lines = build_run_summary_lines(state)
+            first_iteration = state["iterations"][0]
+            island_lines = build_iteration_section_lines(first_iteration, "island")
+            prompt_lines = build_iteration_section_lines(first_iteration, "prompt")
+            snapshot_lines = build_iteration_section_lines(first_iteration, "snapshot")
+
+            self.assertTrue(any("Status:" in line for line in summary_lines))
+            self.assertTrue(any("Best:" in line for line in summary_lines))
+            self.assertIn("Programs ranked by aggregate score:", island_lines)
+            self.assertEqual(prompt_lines[0], "Prompt")
+            self.assertTrue(any("Path:" in line for line in prompt_lines))
+            self.assertTrue(any("Islands after this iteration:" in line for line in snapshot_lines))
+
+    def test_console_reporter_streams_iteration_records_inline(self) -> None:
+        specification = build_string_hash_specification()
+        output = io.StringIO()
+        runner = FunSearchRunner(
+            specification=specification,
+            llm=MockLLM(),
+            config=SearchConfig(iterations=2, islands=2, reset_interval=2, random_seed=0),
+            progress_reporter=ConsoleRunReporter(output=output),
+        )
+
+        runner.run()
+        report_text = output.getvalue()
+
+        self.assertIn("=== FunSearch Run Started ===", report_text)
+        self.assertIn("=== Iteration 1/2 ===", report_text)
+        self.assertIn("[Selected Island]", report_text)
+        self.assertIn("[Prompt]", report_text)
+        self.assertIn("[Completion]", report_text)
+        self.assertIn("[Post Snapshot]", report_text)
+        self.assertIn("=== FunSearch Run Completed ===", report_text)
+
 
 class CliTests(unittest.TestCase):
     def test_problem_flag_defaults_to_capset(self) -> None:
         args = build_parser().parse_args(["--llm", "mock"])
         self.assertEqual(args.problem, "capset")
+
+    def test_live_report_flag_defaults_to_enabled(self) -> None:
+        args = build_parser().parse_args(["--llm", "mock"])
+        self.assertFalse(args.no_live_report)
 
     def test_problem_flag_accepts_string_hash(self) -> None:
         args = build_parser().parse_args(["--problem", "string-hash", "--llm", "mock"])

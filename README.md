@@ -86,6 +86,17 @@ The CLI prints:
 - optional trace directory
 - the full best program currently stored in the database
 
+During the run, the CLI now also streams per-iteration records directly to stdout by default. That inline report includes:
+
+- the selected island and its current programs
+- the sampled historical programs used to build the prompt
+- the full prompt text
+- the raw completion
+- the reconstructed candidate program when extraction succeeds
+- acceptance / rejection details
+- reset actions
+- a short post-iteration database snapshot summary
+
 The string-hash problem is meant as a compact teaching example: `hash_string(s)` stays fixed, FunSearch only mutates `mix_char(h, i, c)`, and the evaluator scores how evenly the resulting hash spreads several small string families across buckets.
 
 ## Saving The Evolution Process
@@ -116,6 +127,37 @@ This layout is meant for two inspection styles:
 
 - sequential replay from `events.jsonl`
 - direct inspection of “what was in the pool at iteration N” via `snapshots/iteration_XXXX.json`
+
+If you only want the final result without the inline per-iteration report, add:
+
+```bash
+--no-live-report
+```
+
+If you save a trace and later want to inspect it again after the run, you can still point `funsearch.trace_viewer` at the trace directory:
+
+```bash
+uv run python -m funsearch.trace_viewer --trace-dir runs/mock-trace
+```
+
+The terminal dashboard auto-refreshes and keeps the same core information that used to be shown in the browser view:
+
+- run status and best score
+- iteration timeline with previous/next navigation
+- selected island contents
+- sampled historical programs used to build the prompt
+- prompt text, raw completion, and reconstructed candidate program
+- acceptance / rejection result and reset actions
+- post-iteration database snapshot summary
+
+Useful keys:
+
+- `h` / `l` or left / right arrow: previous / next iteration
+- `[` / `]` or `tab`: previous / next detail section
+- `j` / `k`: scroll the current section
+- `f`: toggle follow-latest
+- `r`: refresh immediately
+- `q`: quit
 
 ## Tests
 
