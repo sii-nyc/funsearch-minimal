@@ -22,6 +22,7 @@ from funsearch.string_hash import (
     DEFAULT_STRINGS_PER_CASE,
     build_string_hash_specification,
 )
+from funsearch.trace_report import write_trace_report
 from funsearch.tracing import TraceWriter
 
 
@@ -71,7 +72,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--string-hash-strings-per-case",
         type=int,
         default=DEFAULT_STRINGS_PER_CASE,
-        help="Number of strings in each string-hash evaluation case.",
+        help="Number of strings in the fixed string-hash evaluation corpus.",
     )
     parser.add_argument("--temperature", type=float, default=0.8)
     parser.add_argument("--seed", type=int, default=0)
@@ -138,10 +139,13 @@ def main() -> None:
         trace_writer=trace_writer,
         progress_reporter=progress_reporter,
     ).run()
+    trace_report_path = write_trace_report(result.trace_dir) if result.trace_dir is not None else None
     print(f"Best aggregate score: {result.best_score}")
     print(f"Best signature: {result.best_signature}")
     if result.trace_dir is not None:
         print(f"Trace directory: {result.trace_dir}")
+    if trace_report_path is not None:
+        print(f"Trace report: {trace_report_path}")
     print("Best program:")
     print(result.best_program)
 

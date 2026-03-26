@@ -12,42 +12,24 @@ FunSearch 闭环。
 from __future__ import annotations
 
 import random
-import string
+from collections import Counter
 from statistics import mean
 from textwrap import dedent
-from typing import Iterable
+from typing import Callable, Iterable
 
 from funsearch.core import ProblemSpecification
 
 DEFAULT_BUCKETS = 17
 DEFAULT_RANDOM_SEED = 0
 DEFAULT_STRINGS_PER_CASE = 24
-_IDENTIFIER_BASE_STRINGS = (
-    "get_user",
-    "get_users",
-    "get_user_by_id",
-    "get_user_name",
-    "set_user",
-    "set_user_name",
-    "set_user_email",
-    "load_user",
-    "load_user_profile",
-    "save_user",
-    "save_user_profile",
-    "delete_user",
-    "delete_user_cache",
-    "user_to_json",
-    "user_from_json",
-    "parse_user_id",
-    "format_user_name",
-    "update_user",
-    "update_user_name",
-    "update_user_email",
-    "list_users",
-    "list_user_groups",
-    "find_user",
-    "find_user_by_name",
-)
+_TENANTS = ("acme", "globex", "initech", "umbrella", "stark", "wayne")
+_REGIONS = ("us-east-1", "us-west-2", "eu-west-1", "ap-southeast-1")
+_SERVICES = ("auth", "billing", "catalog", "notifications", "search", "storage")
+_OPERATIONS = ("list-users", "sync-profile", "refresh-cache", "checkout", "upload-part", "rebuild-index")
+_FIRST_NAMES = ("alex", "sam", "jordan", "taylor", "morgan", "casey")
+_LAST_NAMES = ("chen", "patel", "garcia", "kim", "brown", "ivanov")
+_METRICS = ("latency_ms", "request_count", "cache_hit_ratio", "queue_depth")
+_ENVIRONMENTS = ("prod", "staging")
 
 STRING_HASH_SEED_PROGRAM = dedent(
     '''\
@@ -82,44 +64,118 @@ STRING_HASH_SEED_PROGRAM = dedent(
 )
 
 
-def make_random_strings(
+def _make_api_path(index: int) -> str:
+    tenant = _TENANTS[index % len(_TENANTS)]
+    region = _REGIONS[(index // 2) % len(_REGIONS)]
+    operation = _OPERATIONS[index % len(_OPERATIONS)]
+    method = ("GET", "POST", "PUT")[index % 3]
+    user_id = 1000 + index * 7
+    return (
+        f"{method} /api/v{1 + (index % 3)}/tenants/{tenant}/users/{user_id}"
+        f"/{operation}?region={region}&include=profile,roles"
+    )
+
+
+def _make_storage_key(index: int) -> str:
+    tenant = _TENANTS[(index + 1) % len(_TENANTS)]
+    region = _REGIONS[index % len(_REGIONS)]
+    service = _SERVICES[(index // 2) % len(_SERVICES)]
+    day = 1 + (index % 28)
+    hour = (index * 3) % 24
+    return (
+        f"s3://logs-{region}/{tenant}/{service}/2026/03/{day:02d}/{hour:02d}/"
+        f"request-{index + 1:05d}.json.gz"
+    )
+
+
+def _make_email_address(index: int) -> str:
+    first_name = _FIRST_NAMES[index % len(_FIRST_NAMES)]
+    last_name = _LAST_NAMES[(index // 2) % len(_LAST_NAMES)]
+    service = _SERVICES[index % len(_SERVICES)]
+    tenant = _TENANTS[(index // 3) % len(_TENANTS)]
+    return f"{first_name}.{last_name}+{service}{index % 17}@{tenant}.example.com"
+
+
+def _make_metric_name(index: int) -> str:
+    environment = _ENVIRONMENTS[index % len(_ENVIRONMENTS)]
+    region = _REGIONS[(index // 2) % len(_REGIONS)]
+    service = _SERVICES[index % len(_SERVICES)]
+    operation = _OPERATIONS[(index // 3) % len(_OPERATIONS)].replace("-", "_")
+    metric = _METRICS[index % len(_METRICS)]
+    return f"metrics.{environment}.{region}.{service}.{operation}.{metric}"
+
+
+def _make_job_name(index: int) -> str:
+    environment = _ENVIRONMENTS[index % len(_ENVIRONMENTS)]
+    region = _REGIONS[index % len(_REGIONS)]
+    service = _SERVICES[(index // 2) % len(_SERVICES)]
+    worker = (index % 12) + 1
+    attempt = (index % 4) + 1
+    return (
+        f"job/{environment}/{region}/{service}/worker-{worker:02d}/"
+        f"attempt-{attempt:02d}/run-{index + 1:05d}"
+    )
+
+
+def _make_file_path(index: int) -> str:
+    service = _SERVICES[index % len(_SERVICES)]
+    tenant = _TENANTS[(index // 2) % len(_TENANTS)]
+    day = 1 + ((index * 5) % 28)
+    return f"/srv/{service}/{tenant}/releases/2026-03-{day:02d}/config/shard_{index % 16:02d}.yaml"
+
+
+def make_realistic_strings(
     rng: random.Random,
     count: int = DEFAULT_STRINGS_PER_CASE,
-    min_length: int = 4,
-    max_length: int = 10,
 ) -> list[str]:
-    """生成随机小写字符串。"""
+    """构造一组更接近真实系统数据的混合字符串。"""
 
-    alphabet = string.ascii_lowercase
+    builders = (
+        _make_api_path,
+        _make_storage_key,
+        _make_email_address,
+        _make_metric_name,
+        _make_job_name,
+        _make_file_path,
+    )
+    offsets = list(range(len(builders)))
+    rng.shuffle(offsets)
+
     strings_out = []
-    for _ in range(count):
-        length = rng.randint(min_length, max_length)
-        strings_out.append("".join(rng.choice(alphabet) for _ in range(length)))
+    for index in range(count):
+        family_index = offsets[index % len(builders)]
+        variant_index = index // len(builders)
+        strings_out.append(builders[family_index](variant_index))
     return strings_out
 
 
-def make_prefixed_strings(count: int = DEFAULT_STRINGS_PER_CASE) -> list[str]:
-    """生成共享前缀的字符串，测试后缀差异是否能被哈希识别。"""
+def build_bucket_assignments(
+    strings: Iterable[str],
+    num_buckets: int,
+    hash_string: Callable[[str], int],
+) -> list[list[str]]:
+    """把字符串按 hash 结果分配到桶里。"""
 
-    return [f"user_{index:04d}" for index in range(1, count + 1)]
+    bucket_strings = [[] for _ in range(num_buckets)]
+    for text in strings:
+        bucket_index = hash_string(text) % num_buckets
+        bucket_strings[bucket_index].append(text)
+    return bucket_strings
 
 
-def make_suffixed_strings(count: int = DEFAULT_STRINGS_PER_CASE) -> list[str]:
-    """生成共享后缀的字符串，测试前缀差异是否能被哈希识别。"""
+def compute_bucket_variance(bucket_strings: list[list[str]]) -> float:
+    """按 evaluator 同样的公式计算 bucket load variance。"""
 
-    return [f"file_{index:03d}.txt" for index in range(1, count + 1)]
+    num_buckets = len(bucket_strings)
+    total_strings = sum(len(bucket) for bucket in bucket_strings)
+    expected_load = total_strings / num_buckets
+    return sum((len(bucket) - expected_load) ** 2 for bucket in bucket_strings) / num_buckets
 
 
-def make_identifier_strings(count: int = DEFAULT_STRINGS_PER_CASE) -> list[str]:
-    """生成一批相互相似的标识符风格字符串。"""
+def build_bucket_histogram(bucket_strings: list[list[str]]) -> dict[int, int]:
+    """统计“load -> 有多少个桶”这样的直方图。"""
 
-    if count <= len(_IDENTIFIER_BASE_STRINGS):
-        return list(_IDENTIFIER_BASE_STRINGS[:count])
-
-    identifiers = list(_IDENTIFIER_BASE_STRINGS)
-    for index in range(count - len(_IDENTIFIER_BASE_STRINGS)):
-        identifiers.append(f"user_helper_{index + 1:03d}")
-    return identifiers
+    return dict(sorted(Counter(len(bucket) for bucket in bucket_strings).items()))
 
 
 def build_string_hash_inputs(
@@ -128,34 +184,16 @@ def build_string_hash_inputs(
     num_buckets: int = DEFAULT_BUCKETS,
     strings_per_case: int = DEFAULT_STRINGS_PER_CASE,
 ) -> tuple[dict[str, object], ...]:
-    """构造一个小而固定的测试集。
+    """构造一个固定的混合真实语料集。
 
-    这里每个输入项都是一个小字典，里面放：
-    - `strings`：这组待哈希的字符串
-    - `num_buckets`：桶数量
-    - `label`：给人看的标签，方便理解这组数据在测什么
+    当前版本只保留一个输入项，让搜索直接优化一个更复杂的哈希任务。
     """
 
     rng = random.Random(random_seed)
     return (
         {
-            "label": "random_lowercase",
-            "strings": make_random_strings(rng, count=strings_per_case),
-            "num_buckets": num_buckets,
-        },
-        {
-            "label": "shared_prefix",
-            "strings": make_prefixed_strings(strings_per_case),
-            "num_buckets": num_buckets,
-        },
-        {
-            "label": "shared_suffix",
-            "strings": make_suffixed_strings(strings_per_case),
-            "num_buckets": num_buckets,
-        },
-        {
-            "label": "identifiers",
-            "strings": make_identifier_strings(strings_per_case),
+            "label": "mixed_realistic_strings",
+            "strings": make_realistic_strings(rng, count=strings_per_case),
             "num_buckets": num_buckets,
         },
     )

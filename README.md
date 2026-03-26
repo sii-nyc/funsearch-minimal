@@ -85,7 +85,7 @@ uv run python main.py \
 The CLI prints:
 
 - best aggregate score
-- per-input score signature
+- score signature on the fixed evaluation inputs
 - optional trace directory
 - the full best program currently stored in the database
 
@@ -100,7 +100,7 @@ During the run, the CLI now also streams per-iteration records directly to stdou
 - reset actions
 - a short post-iteration database snapshot summary
 
-The string-hash problem is meant as a compact teaching example: `hash_string(s)` stays fixed, FunSearch only mutates `mix_char(h, i, c)`, the seed starts from an intentionally trivial mixer, and the evaluator scores how evenly the resulting hash spreads several small string families across buckets.
+The string-hash problem is meant as a compact teaching example: `hash_string(s)` stays fixed, FunSearch only mutates `mix_char(h, i, c)`, the seed starts from an intentionally trivial mixer, and the evaluator scores how evenly the resulting hash spreads one fixed mixed corpus of more realistic strings across buckets.
 
 ## Saving The Evolution Process
 
@@ -125,6 +125,7 @@ The trace directory contains:
 - `candidates/`: reconstructed full candidate programs per iteration when extraction succeeds
 - `programs/`: all accepted programs currently referenced by the database
 - `snapshots/`: full database state after initialization, after every iteration, and at the end
+- `trace_report.txt`: a single plain-text export of the full run, meant for reading in an editor without terminal scrolling limits
 
 This layout is meant for two inspection styles:
 
@@ -161,6 +162,25 @@ Useful keys:
 - `f`: toggle follow-latest
 - `r`: refresh immediately
 - `q`: quit
+
+## Inspecting One Hash Program
+
+The search CLI prints the final score and program source, but sometimes you want the concrete bucket usage for one program. For that, run:
+
+```bash
+uv run python -m funsearch.hash_analysis \
+  --program runs/hash-trace/programs/program_000001.py \
+  --string-hash-buckets 101 \
+  --string-hash-strings-per-case 100
+```
+
+The report includes:
+
+- the score and variance on the current fixed corpus
+- used buckets, empty buckets, collisions, and maximum bucket load
+- a load histogram such as `{0: 41, 1: 37, 2: 18, 3: 5}`
+- the load of every bucket
+- the concrete strings stored in every bucket
 
 ## Tests
 

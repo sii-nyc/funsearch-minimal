@@ -14,19 +14,19 @@ from funsearch.cli import build_parser
 from funsearch.console_reporter import ConsoleRunReporter
 from funsearch.core import FunSearchRunner, SearchConfig, evaluate_program
 from funsearch.database import Island, ProgramDatabase, ProgramRecord
+from funsearch.hash_analysis import analyze_program_source, build_bucket_report
 from funsearch.llm import MockLLM
 from funsearch.tracing import TraceWriter
 from funsearch.prompting import build_prompt, extract_function_source, extract_generated_function, replace_function
 from funsearch.string_hash import (
     DEFAULT_BUCKETS,
     DEFAULT_STRINGS_PER_CASE,
+    build_bucket_assignments,
     build_string_hash_inputs,
     build_string_hash_specification,
-    make_identifier_strings,
-    make_prefixed_strings,
-    make_random_strings,
-    make_suffixed_strings,
+    make_realistic_strings,
 )
+from funsearch.trace_report import write_trace_report
 from funsearch.trace_viewer import build_iteration_section_lines, build_run_summary_lines, load_trace_state
 
 
@@ -50,16 +50,17 @@ class StringHashTests(unittest.TestCase):
         second = build_string_hash_inputs(random_seed=7)
 
         self.assertEqual(first, second)
-        self.assertEqual([case["label"] for case in first], ["random_lowercase", "shared_prefix", "shared_suffix", "identifiers"])
-        self.assertEqual(make_prefixed_strings()[:2], ["user_0001", "user_0002"])
-        self.assertEqual(make_suffixed_strings()[:2], ["file_001.txt", "file_002.txt"])
-        self.assertIn("get_user_by_id", make_identifier_strings())
-        self.assertEqual(len(make_random_strings(random.Random(3))), 24)
+        self.assertEqual([case["label"] for case in first], ["mixed_realistic_strings"])
+        corpus = make_realistic_strings(random.Random(3))
+        self.assertEqual(len(corpus), 24)
+        self.assertTrue(any("/api/" in text for text in corpus))
+        self.assertTrue(any(text.startswith("s3://") for text in corpus))
+        self.assertTrue(any(text.endswith(".example.com") for text in corpus))
 
     def test_string_hash_inputs_respect_bucket_and_case_sizes(self) -> None:
         inputs = build_string_hash_inputs(num_buckets=23, strings_per_case=7)
 
-        self.assertEqual(len(inputs), 4)
+        self.assertEqual(len(inputs), 1)
         self.assertTrue(all(case["num_buckets"] == 23 for case in inputs))
         self.assertTrue(all(len(case["strings"]) == 7 for case in inputs))
 
@@ -74,9 +75,25 @@ class StringHashTests(unittest.TestCase):
         result = evaluate_program(specification.seed_program, specification)
 
         self.assertIsNotNone(result)
-        self.assertEqual(len(result.signature), 4)
+        self.assertEqual(len(result.signature), 1)
         self.assertTrue(all(math.isfinite(score) for score in result.signature))
         self.assertTrue(math.isfinite(result.aggregate_score))
+
+    def test_bucket_assignments_cover_all_strings(self) -> None:
+        specification = build_string_hash_specification(num_buckets=11, strings_per_case=9)
+        namespace: dict[str, object] = {}
+        exec(specification.seed_program, namespace)
+
+        problem = specification.inputs[0]
+        bucket_strings = build_bucket_assignments(
+            problem["strings"],
+            problem["num_buckets"],
+            namespace["hash_string"],
+        )
+
+        flattened = [text for bucket in bucket_strings for text in bucket]
+        self.assertEqual(sorted(flattened), sorted(problem["strings"]))
+        self.assertEqual(len(bucket_strings), 11)
 
     def test_better_mixer_beats_a_weak_one(self) -> None:
         specification = build_string_hash_specification()
@@ -148,7 +165,7 @@ class PromptingTests(unittest.TestCase):
             ProgramRecord(
                 source=specification.seed_program,
                 function_source=seed_function,
-                signature=(-1.0, -2.0, -3.0, -4.0),
+                signature=(-2.5,),
                 aggregate_score=-2.5,
                 source_length=len(specification.seed_program),
                 created_at=0,
@@ -169,7 +186,7 @@ class PromptingTests(unittest.TestCase):
             ProgramRecord(
                 source=specification.seed_program,
                 function_source=seed_function,
-                signature=(-1.14792899408284, -0.6863905325443788, -0.5325443786982249, -0.8402366863905326),
+                signature=(-0.8017751479289941,),
                 aggregate_score=-0.8017751479289941,
                 source_length=len(specification.seed_program),
                 created_at=0,
@@ -180,9 +197,8 @@ class PromptingTests(unittest.TestCase):
 
         self.assertIn("aggregate_score=-0.802", prompt)
         self.assertIn("Best aggregate_score among the shown versions: -0.802", prompt)
-        self.assertIn("signature=(-1.148, -0.686, -0.533, -0.84)", prompt)
+        self.assertIn("signature=(-0.802)", prompt)
         self.assertNotIn("-0.8017751479289941", prompt)
-        self.assertNotIn("-1.14792899408284", prompt)
 
     def test_extract_generated_function_from_fenced_code(self) -> None:
         completion = """Here is a candidate.
@@ -273,7 +289,7 @@ class IntegrationTests(unittest.TestCase):
         rerun_result = evaluate_program(result.best_program, specification)
 
         self.assertIsNotNone(rerun_result)
-        self.assertEqual(len(result.best_signature), 4)
+        self.assertEqual(len(result.best_signature), 1)
         self.assertEqual(result.best_signature, rerun_result.signature)
         self.assertEqual(result.best_score, rerun_result.aggregate_score)
 
@@ -358,6 +374,26 @@ class IntegrationTests(unittest.TestCase):
             self.assertTrue(any("Path:" in line for line in prompt_lines))
             self.assertTrue(any("Islands after this iteration:" in line for line in snapshot_lines))
 
+    def test_trace_report_writes_single_text_file(self) -> None:
+        specification = build_string_hash_specification()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            trace_dir = f"{temp_dir}/trace"
+            FunSearchRunner(
+                specification=specification,
+                llm=MockLLM(),
+                config=SearchConfig(iterations=2, islands=2, reset_interval=2, random_seed=0),
+                trace_writer=TraceWriter(trace_dir),
+            ).run()
+
+            report_path = write_trace_report(trace_dir)
+            report_text = report_path.read_text(encoding="utf-8")
+
+            self.assertEqual(report_path.name, "trace_report.txt")
+            self.assertIn("FunSearch Trace Report", report_text)
+            self.assertIn("Iteration 0000", report_text)
+            self.assertIn("[Prompt]", report_text)
+            self.assertIn("[Completion]", report_text)
+
     def test_console_reporter_streams_iteration_records_inline(self) -> None:
         specification = build_string_hash_specification()
         output = io.StringIO()
@@ -379,6 +415,18 @@ class IntegrationTests(unittest.TestCase):
         self.assertIn("Islands", report_text)
         self.assertNotIn("[Prompt]", report_text)
         self.assertIn("FunSearch Run Completed", report_text)
+
+    def test_hash_analysis_reports_bucket_details(self) -> None:
+        specification = build_string_hash_specification(num_buckets=11, strings_per_case=9)
+        analysis = analyze_program_source(specification.seed_program, specification)
+        report = build_bucket_report(analysis)
+
+        self.assertEqual(analysis["num_strings"], 9)
+        self.assertEqual(analysis["num_buckets"], 11)
+        self.assertEqual(sum(analysis["bucket_histogram"].values()), 11)
+        self.assertIn("Bucket loads:", report)
+        self.assertIn("Bucket contents:", report)
+        self.assertIn("000:", report)
 
 
 class CliTests(unittest.TestCase):
