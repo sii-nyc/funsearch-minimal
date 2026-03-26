@@ -191,12 +191,41 @@ def _extract_island_summary(snapshot: dict[str, Any] | None, island_index: int) 
                     }
                 )
         programs.sort(key=lambda item: (item["aggregate_score"], -item["program_id"]), reverse=True)
+        clusters = []
+        for cluster in island.get("clusters", []):
+            cluster_programs = [
+                {
+                    "program_id": program.get("program_id"),
+                    "aggregate_score": program.get("aggregate_score"),
+                    "signature": program.get("signature"),
+                    "source_path": program.get("source_path"),
+                }
+                for program in cluster.get("programs", [])
+            ]
+            cluster_programs.sort(key=lambda item: (item["aggregate_score"], -item["program_id"]), reverse=True)
+            if not cluster_programs:
+                continue
+            clusters.append(
+                {
+                    "signature": cluster.get("signature"),
+                    "aggregate_score": cluster.get("aggregate_score"),
+                    "programs": cluster_programs,
+                }
+            )
+        clusters.sort(
+            key=lambda cluster: (
+                cluster.get("aggregate_score"),
+                -min(program["program_id"] for program in cluster["programs"]),
+            ),
+            reverse=True,
+        )
         return {
             "index": island.get("index"),
             "best_program_id": island.get("best_program_id"),
             "program_count": island.get("program_count"),
             "cluster_count": island.get("cluster_count"),
             "programs": programs,
+            "clusters": clusters,
         }
     return None
 
