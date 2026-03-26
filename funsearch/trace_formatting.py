@@ -26,6 +26,14 @@ def _format_value(value: Any) -> str:
     return str(value)
 
 
+def _format_score(value: Any) -> str:
+    if value is None:
+        return "N/A"
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return str(value)
+    return f"{float(value):.4f}"
+
+
 def build_run_summary_lines(state: dict[str, Any]) -> list[str]:
     """生成顶部运行摘要。"""
 
@@ -165,21 +173,24 @@ def _build_island_section(iteration_item: dict[str, Any]) -> list[str]:
     if island is None:
         return ["Selected island snapshot is not available for this iteration."]
 
+    best_score = "N/A"
+    if island.get("programs"):
+        best_score = _format_score(island["programs"][0].get("aggregate_score"))
     lines = [
-        f"Island index: {_format_value(island.get('index'))}",
-        f"Best program id: {_format_value(island.get('best_program_id'))}",
-        f"Program count: {_format_value(island.get('program_count'))}",
-        f"Cluster count: {_format_value(island.get('cluster_count'))}",
+        (
+            f"Island {island.get('index')} | best={_format_value(island.get('best_program_id'))} "
+            f"| best_score={best_score} | programs={_format_value(island.get('program_count'))} "
+            f"| clusters={_format_value(island.get('cluster_count'))}"
+        ),
         "",
-        "Programs ranked by aggregate score:",
+        "Programs ranked by score:",
     ]
     for program in island.get("programs", []):
         lines.extend(
             [
                 (
                     f"- program_id={_format_value(program.get('program_id'))} "
-                    f"score={_format_value(program.get('aggregate_score'))} "
-                    f"signature={_format_value(program.get('signature'))}"
+                    f"score={_format_score(program.get('aggregate_score'))}"
                 ),
                 f"  source_path={_format_value(program.get('source_path'))}",
             ]
@@ -188,21 +199,15 @@ def _build_island_section(iteration_item: dict[str, Any]) -> list[str]:
         lines.append("No programs recorded in this island.")
     clusters = island.get("clusters", [])
     if clusters:
-        lines.extend(["", "Clusters ranked by aggregate score:"])
+        lines.extend(["", "Clusters ranked by score:"])
         for index, cluster in enumerate(clusters):
+            program_ids = [program.get("program_id") for program in cluster.get("programs", [])]
             lines.append(
                 (
-                    f"- cluster={index} score={_format_value(cluster.get('aggregate_score'))} "
-                    f"signature={_format_value(cluster.get('signature'))}"
+                    f"- #{index} score={_format_score(cluster.get('aggregate_score'))} "
+                    f"programs={program_ids}"
                 )
             )
-            for program in cluster.get("programs", []):
-                lines.append(
-                    (
-                        f"  program_id={_format_value(program.get('program_id'))} "
-                        f"score={_format_value(program.get('aggregate_score'))}"
-                    )
-                )
     return lines
 
 
@@ -275,14 +280,6 @@ def _build_snapshot_section(iteration_item: dict[str, Any]) -> list[str]:
 
 
 def _build_snapshot_island_lines(island: dict[str, Any]) -> list[str]:
-    lines = [
-        (
-            f"- island={_format_value(island.get('index'))} "
-            f"best_program_id={_format_value(island.get('best_program_id'))} "
-            f"program_count={_format_value(island.get('program_count'))} "
-            f"cluster_count={_format_value(island.get('cluster_count'))}"
-        )
-    ]
     clusters = sorted(
         island.get("clusters", []),
         key=lambda cluster: (
@@ -291,24 +288,22 @@ def _build_snapshot_island_lines(island: dict[str, Any]) -> list[str]:
         ),
         reverse=True,
     )
+    best_score = _format_score(clusters[0].get("aggregate_score")) if clusters else "N/A"
+    lines = [
+        (
+            f"- island {island.get('index')} | best={_format_value(island.get('best_program_id'))} "
+            f"| best_score={best_score} | programs={_format_value(island.get('program_count'))} "
+            f"| clusters={_format_value(island.get('cluster_count'))}"
+        )
+    ]
     for index, cluster in enumerate(clusters):
+        program_ids = [program.get("program_id") for program in cluster.get("programs", [])]
         lines.append(
             (
-                f"  cluster={index} score={_format_value(cluster.get('aggregate_score'))} "
-                f"signature={_format_value(cluster.get('signature'))}"
+                f"  #{index} score={_format_score(cluster.get('aggregate_score'))} "
+                f"programs={program_ids}"
             )
         )
-        for program in sorted(
-            cluster.get("programs", []),
-            key=lambda item: (item.get("aggregate_score"), -item.get("program_id")),
-            reverse=True,
-        ):
-            lines.append(
-                (
-                    f"    program_id={_format_value(program.get('program_id'))} "
-                    f"score={_format_value(program.get('aggregate_score'))}"
-                )
-            )
     if not clusters:
-        lines.append("  No cluster data is available for this island.")
+        lines.append("  No cluster data is available.")
     return lines

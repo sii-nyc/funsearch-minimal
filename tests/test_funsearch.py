@@ -370,13 +370,13 @@ class IntegrationTests(unittest.TestCase):
 
             self.assertTrue(any("Status:" in line for line in summary_lines))
             self.assertTrue(any("Best:" in line for line in summary_lines))
-            self.assertIn("Programs ranked by aggregate score:", island_lines)
-            self.assertTrue(any("Clusters ranked by aggregate score:" in line for line in island_lines))
+            self.assertIn("Programs ranked by score:", island_lines)
+            self.assertTrue(any("Clusters ranked by score:" in line for line in island_lines))
             self.assertEqual(prompt_lines[0], "Prompt")
             self.assertTrue(any("Path:" in line for line in prompt_lines))
             self.assertTrue(any("Islands after this iteration:" in line for line in snapshot_lines))
-            self.assertTrue(any("cluster=0" in line for line in snapshot_lines))
-            self.assertTrue(any("program_id=" in line for line in snapshot_lines))
+            self.assertTrue(any("#0 score=" in line for line in snapshot_lines))
+            self.assertTrue(any("best_score=" in line for line in snapshot_lines))
 
     def test_trace_report_writes_single_text_file(self) -> None:
         specification = build_string_hash_specification()
