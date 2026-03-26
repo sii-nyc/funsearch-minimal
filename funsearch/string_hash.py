@@ -1,8 +1,8 @@
 """字符串哈希 demo 问题。
 
 这个例子比 cap set 更小、更直观：
-- 固定 `hash_string(s)` 主流程
-- 只进化 `mix_char(h, i, c)`
+- 固定 `main(problem)` evaluator
+- 只进化 `hash_string(s)`
 - evaluator 看字符串映射到桶后是否足够均匀
 
 它的教学重点是：让读者清楚看到“只搜索一个很小的函数”也能形成完整的
@@ -33,7 +33,7 @@ _ENVIRONMENTS = ("prod", "staging")
 
 STRING_HASH_SEED_PROGRAM = dedent(
     '''\
-    """Searches for a character-mixing function inside a tiny string hash."""
+    """Searches for a full-string hashing function inside a tiny string hash."""
 
 
     def main(problem):
@@ -50,16 +50,11 @@ STRING_HASH_SEED_PROGRAM = dedent(
 
 
     def hash_string(s):
-        """Hashes a string by repeatedly applying `mix_char`."""
+        """Hashes a string into a 32-bit integer."""
         h = 0
         for i, ch in enumerate(s):
-            h = mix_char(h, i, ord(ch))
+            h = (h * 33 + ord(ch) + i) & 0xFFFFFFFF
         return h ^ len(s)
-
-
-    def mix_char(h, i, c):
-        """Mixes one character into the running hash state."""
-        return (h + c) & 0xFFFFFFFF
     '''
 )
 
@@ -216,7 +211,7 @@ def build_string_hash_specification(
     )
     return ProblemSpecification(
         seed_program=STRING_HASH_SEED_PROGRAM,
-        target_function="mix_char",
+        target_function="hash_string",
         entrypoint="main",
         inputs=normalized_inputs,
         aggregate_scores=lambda scores: float(mean(scores)),

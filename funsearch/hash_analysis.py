@@ -23,7 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--program",
         required=True,
-        help="Path to a full Python program containing main/hash_string/mix_char.",
+        help="Path to a full Python program containing main(problem) and hash_string(s).",
     )
     parser.add_argument(
         "--string-hash-buckets",

@@ -95,14 +95,16 @@ class StringHashTests(unittest.TestCase):
         self.assertEqual(sorted(flattened), sorted(problem["strings"]))
         self.assertEqual(len(bucket_strings), 11)
 
-    def test_better_mixer_beats_a_weak_one(self) -> None:
+    def test_better_hasher_beats_a_weak_one(self) -> None:
         specification = build_string_hash_specification()
-        weak_function = "def mix_char(h, i, c):\n    return h\n"
+        weak_function = "def hash_string(s):\n    return 0\n"
         strong_function = dedent(
             """\
-            def mix_char(h, i, c):
-                h ^= c + i * 17
-                h = (h * 131) & 0xFFFFFFFF
+            def hash_string(s):
+                h = 2166136261
+                for i, ch in enumerate(s):
+                    h ^= ord(ch) + i * 17
+                    h = (h * 16777619) & 0xFFFFFFFF
                 return h
             """
         )
@@ -175,9 +177,8 @@ class PromptingTests(unittest.TestCase):
         prompt = build_prompt(specification.seed_program, specification.target_function, records)
 
         self.assertIn("def main(problem):", prompt)
-        self.assertIn("def hash_string(s):", prompt)
-        self.assertNotIn("def mix_char(h, i, c):", prompt)
-        self.assertIn("def mix_char_v1(h, i, c):", prompt)
+        self.assertNotIn("def hash_string(s):", prompt)
+        self.assertIn("def hash_string_v1(s):", prompt)
 
     def test_prompt_rounds_scores_and_signatures_for_readability(self) -> None:
         specification = build_string_hash_specification()
@@ -340,7 +341,7 @@ class IntegrationTests(unittest.TestCase):
             self.assertEqual(Path(state["trace_dir"]), Path(trace_dir).resolve())
             self.assertEqual(state["completed_iterations"], 2)
             self.assertEqual(len(state["iterations"]), 2)
-            self.assertEqual(state["run_metadata"]["specification"]["target_function"], "mix_char")
+            self.assertEqual(state["run_metadata"]["specification"]["target_function"], "hash_string")
             first_iteration = state["iterations"][0]
             self.assertEqual(first_iteration["iteration"], 0)
             self.assertIsNotNone(first_iteration["selected_island"])

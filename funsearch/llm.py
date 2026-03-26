@@ -77,35 +77,47 @@ def priority_v2(element, n):
 """,
         ]
         # string-hash 问题用的一组手写候选。
-        self._mix_char_responses = [
-            """def mix_char_v2(h, i, c):
-    \"\"\"Mixes one character into the running hash state.\"\"\"
-    return ((h << 5) - h + c + i) & 0xFFFFFFFF
+        self._hash_string_responses = [
+            """def hash_string_v2(s):
+    \"\"\"Hashes a string into a 32-bit integer.\"\"\"
+    h = 0
+    for i, ch in enumerate(s):
+        h = ((h << 5) - h + ord(ch) + i) & 0xFFFFFFFF
+    return h ^ len(s)
 """,
-            """def mix_char_v2(h, i, c):
-    \"\"\"Mixes one character into the running hash state.\"\"\"
-    h ^= c + i * 17
-    return (h * 131) & 0xFFFFFFFF
+            """def hash_string_v2(s):
+    \"\"\"Hashes a string into a 32-bit integer.\"\"\"
+    h = 2166136261
+    for i, ch in enumerate(s):
+        h ^= ord(ch) + i * 17
+        h = (h * 16777619) & 0xFFFFFFFF
+    return h
 """,
             """```python
-def mix_char_v2(h, i, c):
-    \"\"\"Mixes one character into the running hash state.\"\"\"
-    h += c ^ (i * 29)
-    h ^= h >> 13
-    return (h * 257) & 0xFFFFFFFF
+def hash_string_v2(s):
+    \"\"\"Hashes a string into a 32-bit integer.\"\"\"
+    h = 0
+    for i, ch in enumerate(s):
+        h += ord(ch) ^ (i * 29)
+        h ^= h >> 13
+        h = (h * 257) & 0xFFFFFFFF
+    return h ^ len(s)
 ```
 """,
-            """def mix_char_v2(h, i, c):
-    \"\"\"Mixes one character into the running hash state.\"\"\"
-    return (h * 65599 + (c ^ i)) & 0xFFFFFFFF
+            """def hash_string_v2(s):
+    \"\"\"Hashes a string into a 32-bit integer.\"\"\"
+    h = 0
+    for i, ch in enumerate(s):
+        h = (h * 65599 + (ord(ch) ^ i)) & 0xFFFFFFFF
+    return h ^ (len(s) << 1)
 """,
         ]
 
     def generate(self, prompt: str) -> str:
         """根据 prompt 中的目标函数名，选择对应问题的 mock 响应。"""
 
-        if "def mix_char_v" in prompt:
-            responses = self._mix_char_responses
+        if "def hash_string_v" in prompt:
+            responses = self._hash_string_responses
         else:
             responses = self._priority_responses
         response = responses[self._index % len(responses)]

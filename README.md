@@ -30,7 +30,7 @@ Compared with the paper, this version is intentionally small:
 
 - `main.py`: CLI entrypoint
 - `funsearch/capset.py`: cap set utilities and the paper-style problem specification
-- `funsearch/string_hash.py`: a tiny string-hash demo that evolves `mix_char(h, i, c)`
+- `funsearch/string_hash.py`: a tiny string-hash demo that evolves `hash_string(s)`
 - `funsearch/core.py`: specification, evaluator, and search loop
 - `funsearch/database.py`: islands, clustering, and resets
 - `funsearch/prompting.py`: best-shot prompt building and AST-based candidate extraction
@@ -100,7 +100,7 @@ During the run, the CLI now also streams per-iteration records directly to stdou
 - reset actions
 - a short post-iteration database snapshot summary
 
-The string-hash problem is meant as a compact teaching example: `hash_string(s)` stays fixed, FunSearch only mutates `mix_char(h, i, c)`, the seed starts from an intentionally trivial mixer, and the evaluator scores how evenly the resulting hash spreads one fixed mixed corpus of more realistic strings across buckets.
+The string-hash problem is meant as a compact teaching example: `main(problem)` stays fixed, FunSearch mutates the whole `hash_string(s)` function, and the evaluator scores how evenly the resulting hash spreads one fixed mixed corpus of more realistic strings across buckets.
 
 ## Saving The Evolution Process
 
